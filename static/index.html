@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DOCX Formatting Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --surface: #ffffff;
+      --border: #dee2e6;
+      --text: #212529;
+      --text-muted: #6c757d;
+      --accent: #5c4d9e;
+      --accent-dim: #6f42c1;  
+      --success: #198754;
+      --error: #dc3545;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      text-align: center;
+      background: var(--surface);
+      transition: border-color 0.2s, background 0.2s;
+      cursor: pointer;
+      margin-bottom: 1.5rem;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent-dim);
+      background: rgba(111, 66, 193, 0.08);
+    }
+    .upload-zone input[type="file"] { display: none; }
+    .upload-zone .icon {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.9;
+    }
+    .upload-zone .hint {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .error {
+      background: rgba(220, 53, 69, 0.12);
+      color: var(--error);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .results-header .filename {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+    .results-header .count {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 0.9rem 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      transition: background 0.15s;
+    }
+    .card-header:hover { background: rgba(0,0,0,0.04); }
+    .card-index {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      min-width: 2.5ch;
+    }
+    .card-preview {
+      flex: 1;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .card-toggle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .card-body {
+      padding: 0 1rem 1rem;
+      border-top: 1px solid var(--border);
+    }
+    .card-body-inner {
+      padding-top: 1rem;
+      font-size: 0.85rem;
+    }
+    .card-body section {
+      margin-bottom: 1rem;
+    }
+    .card-body section:last-child { margin-bottom: 0; }
+    .card-body h4 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin: 0 0 0.4rem 0;
+    }
+    .card-body dl {
+      margin: 0;
+      display: grid;
+      gap: 0.25rem;
+    }
+    .card-body dt {
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    .card-body dd {
+      margin: 0;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .table-data-section { margin-bottom: 1rem; }
+    .table-wrapper { overflow-x: auto; margin-top: 0.4rem; }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .data-table td, .data-table th {
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.6rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .data-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.03); }
+    .loading {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 2rem;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>DOCX Formatting Viewer</h1>
+    <p class="subtitle">Upload a Word document to see paragraph-level formatting (font, alignment, spacing, section).</p>
+
+    <div class="upload-zone" id="uploadZone" role="button" tabindex="0">
+      <input type="file" id="fileInput" accept=".docx" />
+      <div class="icon">📄</div>
+      <div>Drop a .docx file here or click to choose</div>
+      <div class="hint">Only .docx files, max 16 MB</div>
+    </div>
+
+    <div class="error hidden" id="errorBox"></div>
+    <div class="loading hidden" id="loading">Processing…</div>
+
+    <div id="resultsSection" class="hidden">
+      <div class="results-header">
+        <span class="filename" id="resultFilename"></span>
+        <span class="count" id="resultCount"></span>
+      </div>
+      <div id="resultsList"></div>
+    </div>
+  </div>
+
+  <script>
+    const uploadZone = document.getElementById("uploadZone");
+    const fileInput = document.getElementById("fileInput");
+    const errorBox = document.getElementById("errorBox");
+    const loading = document.getElementById("loading");
+    const resultsSection = document.getElementById("resultsSection");
+    const resultFilename = document.getElementById("resultFilename");
+    const resultCount = document.getElementById("resultCount");
+    const resultsList = document.getElementById("resultsList");
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.classList.remove("hidden");
+      loading.classList.add("hidden");
+      resultsSection.classList.add("hidden");
+    }
+    function clearError() {
+      errorBox.classList.add("hidden");
+    }
+
+    uploadZone.addEventListener("click", () => fileInput.click());
+    uploadZone.addEventListener("dragover", (e) => { e.preventDefault(); uploadZone.classList.add("dragover"); });
+    uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("dragover"));
+    uploadZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove("dragover");
+      const file = e.dataTransfer?.files?.[0];
+      if (file) handleFile(file);
+    });
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (file) handleFile(file);
+    });
+
+    function handleFile(file) {
+      if (!file.name.toLowerCase().endsWith(".docx")) {
+        showError("Please choose a .docx file.");
+        return;
+      }
+      clearError();
+      loading.classList.remove("hidden");
+      resultsSection.classList.add("hidden");
+
+      const form = new FormData();
+      form.append("file", file);
+
+      fetch("/api/upload", { method: "POST", body: form })
+        .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          loading.classList.add("hidden");
+          if (!ok) {
+            showError(data.error || "Upload failed.");
+            return;
+          }
+          renderResults(data.filename, data.data);
+        })
+        .catch(() => {
+          loading.classList.add("hidden");
+          showError("Network error. Is the server running?");
+        });
+    }
+
+    function renderResults(filename, data) {
+      resultFilename.textContent = filename;
+      const paraCount = data.filter((item) => item.type === "paragraph").length;
+      const tableCount = data.filter((item) => item.type === "table").length;
+      const countParts = [];
+      if (paraCount) countParts.push(paraCount + " paragraph(s)");
+      if (tableCount) countParts.push(tableCount + " table(s)");
+      resultCount.textContent = countParts.length ? countParts.join(", ") : "0 blocks";
+      resultsList.innerHTML = "";
+      data.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const blockIndex = item.block_index !== undefined ? item.block_index : item.paragraph_index;
+        if (item.type === "table") {
+          const fmt = item["Formatting of selected text"] || {};
+          const preview = "Table: " + (item.row_count || 0) + " row(s), " + (item.column_count || 0) + " column(s)";
+          card.innerHTML = `
+            <div class="card-header" role="button" aria-expanded="false">
+              <span class="card-index">#${blockIndex}</span>
+              <span class="card-preview">${escapeHtml(preview)}</span>
+              <span class="card-toggle">Show table & formatting</span>
+            </div>
+            <div class="card-body hidden">
+              <div class="card-body-inner">
+                <section class="table-data-section">
+                  <h4>Table content</h4>
+                  <div class="table-wrapper">
+                    <table class="data-table">
+                      <tbody>${(item.rows || []).map((row) =>
+                        "<tr>" + row.map((cell) => "<td>" + escapeHtml(cell) + "</td>").join("") + "</tr>"
+                      ).join("")}</tbody>
+                    </table>
+                  </div>
+                </section>
+                ${renderSection("Table", fmt.Table)}
+              </div>
+            </div>
+          `;
+        } else {
+          const fmt = item["Formatting of selected text"] || {};
+          const preview = (item.text_preview || "").replace(/\n/g, " ");
+          card.innerHTML = `
+            <div class="card-header" role="button" aria-expanded="false">
+              <span class="card-index">#${blockIndex}</span>
+              <span class="card-preview">${escapeHtml(preview)}</span>
+              <span class="card-toggle">Show formatting</span>
+            </div>
+            <div class="card-body hidden">
+              <div class="card-body-inner">
+                ${renderSection("Font", fmt.Font)}
+                ${renderSection("Paragraph", fmt.Paragraph)}
+                ${renderSection("Section", fmt.Section)}
+              </div>
+            </div>
+          `;
+        }
+        const header = card.querySelector(".card-header");
+        const body = card.querySelector(".card-body");
+        const toggle = card.querySelector(".card-toggle");
+        header.addEventListener("click", () => {
+          const open = !body.classList.contains("hidden");
+          body.classList.toggle("hidden", open);
+          header.setAttribute("aria-expanded", !open);
+          toggle.textContent = open ? (item.type === "table" ? "Show table & formatting" : "Show formatting") : (item.type === "table" ? "Hide table & formatting" : "Hide formatting");
+        });
+        resultsList.appendChild(card);
+      });
+      resultsSection.classList.remove("hidden");
+    }
+
+    function renderSection(title, obj) {
+      if (!obj || typeof obj !== "object") return "";
+      const entries = Object.entries(obj).map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd>`).join("");
+      return `<section><h4>${escapeHtml(title)}</h4><dl>${entries}</dl></section>`;
+    }
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+# =====================
+# OS files
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# Logs
+# =====================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =====================
+# Environment variables
+# =====================
+.env
+.env.*
+!.env.example
+
+# =====================
+# Node.js
+# =====================
+node_modules/
+npm-cache/
+.yarn/
+.pnpm-store/
+
+# =====================
+# Python
+# =====================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+
+# =====================
+# Java / JVM
+# =====================
+target/
+*.class
+
+# =====================
+# Build / dist
+# =====================
+dist/
+build/
+out/
+
+# =====================
+# IDE / Editors
+# =====================
+.vscode/
+.idea/
+*.swp
+
+# =====================
+# Git
+# =====================
+.git/
