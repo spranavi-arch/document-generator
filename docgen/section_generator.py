@@ -57,12 +57,14 @@ Field data (new case — substitute these values; do not invent):
 {field_block}
 ---
 
+CASE SUMMARY: If Field data above includes "case_summary" or "case_summary_or_context", use that data whenever this section needs contextual details, background facts, or narrative (e.g. allegations, statement of facts, notice text) that are not fully covered by the other fields. Use the case summary to inform what you write for this particular section; do not paste it verbatim unless it fits the section's purpose.
+
 CRITICAL — follow exactly:
 1. OUTPUT THE DOCUMENT TEXT ONLY for this section. Same layout and structure as the sample (court header, caption, body, date lines, signature blocks — whatever the sample for this section contains). No summaries or explanations. Only the real document text.
 2. FORMAT & STRUCTURE: Replicate the sample's format, structure, spacing, and numbering for this section. Use Field data above for all variable facts (names, dates, court, index no., addresses, attorney info). If a value is missing, use placeholders: [Date], [Index No.], [Judge Name], [Attorney Name], etc.
 3. DO NOT COPY VERBATIM: Adapt structure and style from the sample using the provided case data. Use formal court-appropriate legal language. Expand legal reasoning and factual allegations to match the depth of the sample.
 4. CONSISTENCY: Use the same party names, case number, court name, dates, addresses, and attorney information throughout (same spelling and form).
-5. MAXIMUM INFORMATION: Use all information in the Field data above. Do not omit facts, dates, or figures that appear in the Field data.
+5. MAXIMUM INFORMATION: Use all information in the Field data above, including the case summary when this section needs it. Do not omit facts, dates, or figures that appear in the Field data.
 6. ONE SECTION ONLY: {section_scope} Do not merge multiple sections. No analysis, explanations, or comments.
 {DOCUMENT_RULES}
 """

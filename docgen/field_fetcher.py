@@ -481,6 +481,13 @@ def _do_request_with_retry(
     return (last_resp, last_status, last_err)
 
 
+# Extra question asked once to get case summary; passed to every section for context.
+CASE_SUMMARY_QUESTION = (
+    "Provide a brief case summary including the key facts, parties, dates, and context "
+    "that would be relevant for drafting legal documents for this case."
+)
+
+
 def call_chat_api_with_question(curl_str: str, question: str) -> str:
     """
     Use the CURL as a template: replace the user message (e.g. "content") with `question`,
@@ -539,6 +546,19 @@ def call_chat_api_with_question_debug(curl_str: str, question: str) -> dict:
         "response_keys": keys,
         "extracted_preview": (answer[:300] + "..." if len(answer) > 300 else answer),
     }
+
+
+def fetch_case_summary(curl_str: str) -> str:
+    """
+    Ask the chat API for a case summary (one extra question). Returns the answer text
+    or empty string if the API returns a non-answer. Pass the result to section
+    prompts along with required fields; sections can use it when they need context.
+    """
+    if not (curl_str or "").strip():
+        return ""
+    answer = call_chat_api_with_question(curl_str, CASE_SUMMARY_QUESTION)
+    answer = (answer or "").strip()
+    return answer if _is_substantive_answer(answer) else ""
 
 
 def fetch_all_fields_via_chat(

@@ -73,6 +73,7 @@ from docgen.section_prompt_generator import generate_prompt_and_fields
 from docgen.field_fetcher import (
     call_chat_api_with_question_debug,
     fetch_all_fields_via_chat,
+    fetch_case_summary,
     _default_question_for_field,
 )
 from docgen.question_generator import generate_questions_for_fields
@@ -111,10 +112,10 @@ def _run_formatting_llm(final_draft: str, sample1_bytes: bytes) -> tuple[str, st
     """Call formatting backend: use first sample as DOCX template, final_draft as text. Returns (output_path, preview_text, docx_bytes, prompt_preview)."""
     fmt_backend = _load_formatting_backend()
     template_file = BytesIO(sample1_bytes)
-    output_path, preview_text, prompt_preview = fmt_backend.process_document(final_draft, template_file)
+    output_path, preview_text = fmt_backend.process_document(final_draft, template_file)
     with open(output_path, "rb") as f:
         docx_bytes = f.read()
-    return output_path, preview_text, docx_bytes, prompt_preview
+    return output_path, preview_text, docx_bytes, {}
 
 
 def _run_formatting_section_by_section(
@@ -202,37 +203,41 @@ def _edited_preview_to_blocks(edited_text: str, stored_blocks: list) -> list:
     return new_blocks
 
 
+def _blocks_to_draft_text(blocks: list) -> str:
+    """Convert stored blocks to draft text (\\n\\n between paragraphs, [SECTION_UNDERLINE] for underlines) for process_document."""
+    parts = []
+    for kind, text in blocks:
+        if kind == "page_break":
+            continue
+        if kind == "section_underline":
+            parts.append(_SECTION_UNDERLINE_MARKER)
+        else:
+            parts.append((text or "").strip())
+    return "\n\n".join(p for p in parts if p).strip()
+
+
 def _run_editor_rebuild(blocks: list, sample1_bytes: bytes, formatting_overrides: dict) -> tuple[bytes, str]:
-    """Rebuild DOCX from blocks and optional formatting overrides. Returns (docx_bytes, preview_text)."""
+    """Rebuild DOCX from blocks by converting to draft text and calling formatting backend process_document. Returns (docx_bytes, preview_text)."""
+    draft_text = _blocks_to_draft_text(blocks)
     fmt_backend = _load_formatting_backend()
-    output_path, preview_text = fmt_backend.process_document_from_blocks(
-        blocks,
-        BytesIO(sample1_bytes),
-        formatting_overrides=formatting_overrides or None,
-    )
+    output_path, preview_text = fmt_backend.process_document(draft_text, BytesIO(sample1_bytes))
     with open(output_path, "rb") as f:
         return f.read(), preview_text
 
 
 def _run_formatting_draft_driven(final_draft: str, sample1_bytes: bytes) -> tuple[str, str, bytes]:
-    """Format using draft structure + sample styles only. Returns (output_path, preview_text, docx_bytes)."""
+    """Format using template DOCX styles; structure from draft. Uses formatting backend process_document (LLM + template). Returns (output_path, preview_text, docx_bytes)."""
     fmt_backend = _load_formatting_backend()
-    output_path, preview_text = fmt_backend.process_document_draft_driven(
-        final_draft,
-        BytesIO(sample1_bytes),
-    )
+    output_path, preview_text = fmt_backend.process_document(final_draft, BytesIO(sample1_bytes))
     with open(output_path, "rb") as f:
         docx_bytes = f.read()
     return output_path, preview_text, docx_bytes
 
 
 def _run_editor_rebuild_draft_driven(edited_text: str, sample1_bytes: bytes) -> tuple[bytes, str]:
-    """Rebuild DOCX from edited text using draft-driven formatting. Returns (docx_bytes, preview_text)."""
+    """Rebuild DOCX from edited text using formatting backend process_document. Returns (docx_bytes, preview_text)."""
     fmt_backend = _load_formatting_backend()
-    output_path, preview_text = fmt_backend.process_document_draft_driven(
-        edited_text,
-        BytesIO(sample1_bytes),
-    )
+    output_path, preview_text = fmt_backend.process_document(edited_text, BytesIO(sample1_bytes))
     with open(output_path, "rb") as f:
         return f.read(), preview_text
 
@@ -432,6 +437,14 @@ def run_pipeline():
             status_placeholder.markdown("**Done.** All fields fetched.")
             progress.progress(1.0, text="Done.")
 
+            # Extra question: case summary (passed to every section)
+            status_placeholder.markdown("**Fetching case summary…**")
+            case_summary = fetch_case_summary(curl_str)
+            field_values["case_summary"] = case_summary or ""
+            if case_summary:
+                st.caption("Case summary received and will be passed to each section.")
+            status_placeholder.markdown("**Done.** All fields fetched.")
+
         with st.expander("Field → value (from API)"):
             for f, v in field_values.items():
                 vstr = str(v)
@@ -456,6 +469,10 @@ def run_pipeline():
         section_field_values = {f: field_values.get(f, "") for f in required_fields}
         if ctx:
             section_field_values["case_summary_or_context"] = ctx
+        # Pass case summary to every section (from extra API question); use if section needs context
+        case_summary = field_values.get("case_summary", "")
+        if case_summary:
+            section_field_values["case_summary"] = case_summary
 
         with st.status(f"Generating section {i + 1}/{len(sections_list)}: **{name}**", state="running"):
             text = generate_section(
