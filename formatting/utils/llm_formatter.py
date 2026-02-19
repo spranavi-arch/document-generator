@@ -6,7 +6,6 @@ import re
 
 from utils.style_extractor import build_section_formatting_prompts
 
-
 # Phrases sometimes emitted by the model instead of/in addition to JSON; strip before parsing.
 _LLM_REFUSAL_PATTERN = re.compile(
     r"\s*I'm sorry, but I can't assist with that\.?\s*",
@@ -347,7 +346,7 @@ LOGICAL_BLOCK_TYPES = (
     "page_break",
 )
 
-SYSTEM_PROMPT = """You format raw text so the output has the same styling and structure as the uploaded template document. The template may be any type (summons, complaint, motion, memorandum, letter, etc.).
+SYSTEM_PROMPT = """You format raw text so the output has the same styling and structure as the uploaded template document. The template may be any type (summons, complaint, motion, notice of claim, affidavit, memorandum, letter, etc.).
 
 CRITICAL:
 - You MUST NOT invent, rewrite, summarize, or change jurisdiction/venue/party names.
@@ -358,7 +357,11 @@ Task: (1) Use the template structure and style guide below to label every part o
 
 Rules (apply to any document type):
 - Match the template: use each style exactly as the template does (title style for main title, section style for section headings, body style for paragraphs, list style for list items).
-- One block per logical segment. Preserve exact wording. Output plain text only (no markdown).
+- One block per logical segment. Preserve exact wording.
+- Selective bold/italic/underline within a paragraph: use ** for bold, * for italic, and __ for underline in the text field. Example: against the **CITY OF NEW YORK** (hereinafter as *"respondent"*). Do not bold/italic entire paragraphs; use markers only where the template has selective emphasis. Do not bold words that are merely capitalized (e.g. "CLAIMANT'S" in body text stays regular unless the template bolds it).
+- NOTICE OF CLAIM (and similar claim forms): Bold (**) the document title "NOTICE OF CLAIM", claimant and respondent names (e.g. **ANTHONY SCHEMBRI**, **CITY OF NEW YORK**), **-Against-** when on its own line, "TO:" and addressee name (e.g. **TO: CITY OF NEW YORK**), **PLEASE TAKE NOTICE**, firm and attorney names (e.g. **SEELIG DRESSLER OCHANI, LLC**), key terms like **Personal Injury Action** or **TRIP AND FALL**, dates and addresses when the template emphasizes them (e.g. **NOVEMBER 2, 2025**, **349 EAST 51ST STREET, NEW YORK, NEW YORK 10022**), and section headings (e.g. **1. The name and address of claimant...** or **The nature of the claim:**). Use * only for defined terms in parentheses: *"respondent"*, *"claimant"*. Use __ for underlined phrases when the template underlines (e.g. __that municipal repairs,__). Leave all other body narrative, addresses, phone numbers, and plain capitalized words (e.g. "CLAIMANT'S" in the middle of a sentence) without ** or *.
+- Layout: Match the template's alignment (centered title, left-aligned caption and addresses, justified body paragraphs), spacing (tight or generous as in the template), and structure. If the template has a two-column layout (e.g. CLAIMANT left / ATTORNEYS right), output blocks in the same order as the template so content flows into the correct columns.
+- Template fidelity (court-grade output): Preserve the template's structure; do not normalize or flatten. (1) Numbering: When the template has explicit numbered clauses (1., 2., 3., 4.)—e.g. "1. The name and post-office address of the claimant...", "2. The nature of the claim:"—output those numbers in the text of each block. Do not convert them to unnumbered headings. (2) Tabs: For tab-separated dual-column layout (e.g. firm name left, claimant name right on one line), use tab characters in the text where the template has column breaks so alignment is preserved. (3) Spacing and hierarchy: Output one block per logical segment in the same order as the template so the engine can apply the template's spacing, indentation, and alignment. (4) Separator lines: Use block_type line with the exact line characters from the template; keep centered separators as their own block so spacing is preserved.
 - Case number / date / caption -> use the template style used for that in the template (often right-aligned).
 - Addresses -> same style as in template; one block per line if the template breaks them.
 - Signature block -> use the template style; use block_type signature_line for the underline line.
@@ -381,7 +384,7 @@ Complaint structure (when present in raw text)—output each as separate blocks 
 - Attorney verification (if present) -> separate blocks for the heading, body paragraphs, and signature. Use the same styles as in the template for verification.
 - The document does NOT end at the first attorney signature. If the raw text continues after "Yours, etc.;" or after the first signature block with any of: WHEREFORE and demands for relief, another caption (e.g. MUMUNI AHMED, Index No.:), verification (ATTORNEY'S VERIFICATION / affirms under penalties of perjury), SUMMONS AND VERIFIED COMPLAINT footer, certification (22 NYCRR 130-1.1(c)), Service of a copy... admitted, or NOTICE OF ENTRY—you MUST output blocks for every one of those sections. Continue until the very end of the raw text.
 
-Reply with a JSON array only. Each element: {"block_type": "<exact style name from template or line/signature_line/page_break>", "text": "<content>"}."""
+Reply with a JSON array only. Each element: {"block_type": "<exact style name from template or line/signature_line/page_break>", "text": "<content>"}. In text use ** for bold, * for italic, __ for underline only where the template has selective emphasis; do not wrap whole paragraphs in ** or *."""
 
 
 def _call_openai(
@@ -396,10 +399,17 @@ def _call_openai(
     if not OpenAI and not AzureOpenAI:
         raise RuntimeError("openai package not installed. pip install openai")
 
-    style_guide = (style_schema.get("style_guide") or style_schema.get("style_guide_markdown") or "").strip()
-    if not style_guide:
-        style_list = style_schema.get("paragraph_style_names", []) or list(style_schema.get("style_map", {}).values())
-        style_guide = "Style names: " + ", ".join(style_list)
+    # Prefer single combined block when present (avoids duplicate prompt-building passes)
+    formatting_instructions = (style_schema.get("formatting_instructions") or "").strip()
+    if not formatting_instructions:
+        style_guide = (style_schema.get("style_guide") or style_schema.get("style_guide_markdown") or "").strip()
+        if not style_guide:
+            style_list = style_schema.get("paragraph_style_names", []) or list(style_schema.get("style_map", {}).values())
+            style_guide = "Style names: " + ", ".join(style_list)
+        template_content_for_prompt = style_schema.get("template_content", [])
+        style_formatting = style_schema.get("style_formatting", {})
+        section_prompts = build_section_formatting_prompts(template_content_for_prompt, style_formatting)
+        formatting_instructions = style_guide + ("\n\n" + section_prompts if section_prompts else "")
 
     line_samples = style_schema.get("line_samples", [])
     line_note = ""
@@ -418,13 +428,6 @@ def _call_openai(
             lines.append(f"[{style_name}]: {para_text}" if para_text else f"[{style_name}]:")
         template_section = "Template document (each paragraph with its style name):\n" + "\n".join(lines) + "\n\n"
 
-    # Per-section formatting prompts (dynamic prompt for each section type)
-    style_formatting = style_schema.get("style_formatting", {})
-    section_prompts = build_section_formatting_prompts(template_content, style_formatting)
-    section_block = ""
-    if section_prompts:
-        section_block = section_prompts + "\n\n"
-
     # Optional: OCR text from template pages (Tesseract) for formatting/structure reference
     ocr_texts = template_page_ocr_texts if template_page_ocr_texts is not None else (style_schema.get("template_page_ocr_texts") or [])
     ocr_block = ""
@@ -433,14 +436,14 @@ def _call_openai(
         if lines:
             ocr_block = "OCR text extracted from template pages (use for layout/structure reference):\n\n" + "\n\n".join(lines) + "\n\n"
 
-    user_text = f"""{template_section}{section_block}{ocr_block}Extracted style guide (use these exact style names as block_type):
+    user_text = f"""{template_section}{ocr_block}Formatting instructions (use these exact style names as block_type):
 
-{style_guide}
+{formatting_instructions}
 {line_note}
 
 ---
 
-Raw text to format. Match the template structure above: use the same styles for titles, section headings, body paragraphs, and lists as in the template. For causes of action (e.g. negligence): output each allegation (each "That on...", "By reason of...", etc.) as a separate block with the template's list/numbered style; do not add "1." or "2." in the text—numbering is applied from the template. Insert page_break where the template starts a new section on a new page. Include every part of the raw text to the very end—do not stop after the first signature block; if WHEREFORE, verification, SUMMONS AND VERIFIED COMPLAINT, certification, or NOTICE OF ENTRY appear later in the raw text, output blocks for all of them. Output plain text only. Output a JSON array of {{"block_type": "<style name or line/signature_line/page_break>", "text": "<content>"}}.
+Raw text to format. Match the template structure above: use the same styles for titles, section headings, body paragraphs, and lists as in the template. For causes of action (e.g. negligence): output each allegation (each "That on...", "By reason of...", etc.) as a separate block with the template's list/numbered style; do not add "1." or "2." in the text—numbering is applied from the template. Insert page_break where the template starts a new section on a new page. Include every part of the raw text to the very end—do not stop after the first signature block; if WHEREFORE, verification, SUMMONS AND VERIFIED COMPLAINT, certification, or NOTICE OF ENTRY appear later in the raw text, output blocks for all of them. In the text field use ** for bold, * for italic, and __ for underline only where the template has selective emphasis (e.g. NOTICE OF CLAIM: bold title, party names, -Against-, PLEASE TAKE NOTICE, firm names, key terms like Personal Injury Action, dates/addresses when emphasized; italic only for "respondent"/"claimant" in parentheses; underline only when the template underlines a phrase). Do not bold/italic entire paragraphs or plain capitalized words. Output a JSON array of {{"block_type": "<style name or line/signature_line/page_break>", "text": "<content>"}}.
 
 ---
 {text}

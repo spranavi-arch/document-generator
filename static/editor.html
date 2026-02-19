@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Legal Document Editor — CKEditor 5</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --surface: #ffffff;
+      --border: #dee2e6;
+      --text: #212529;
+      --text-muted: #6c757d;
+      --accent: #5c4d9e;
+      --accent-dim: #6f42c1;
+      --success: #198754;
+      --error: #dc3545;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .app-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .app-bar h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+    .app-bar a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .app-bar a:hover { text-decoration: underline; }
+    .app-bar .actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .btn:hover {
+      border-color: var(--accent-dim);
+      background: rgba(111, 66, 193, 0.08);
+      color: var(--accent-dim);
+    }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent-dim);
+      color: #fff;
+    }
+    .editor-wrap {
+      max-width: 900px;
+      margin: 1.5rem auto;
+      padding: 0 1.5rem 2rem;
+    }
+    .editor-wrap .ck-editor__editable {
+      min-height: 420px;
+      font-size: 12pt;
+      line-height: 1.5;
+    }
+    .editor-wrap .ck-content {
+      font-family: "Times New Roman", Times, serif;
+    }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+    }
+    .toast.success { background: var(--success); color: #fff; }
+    .toast.error { background: var(--error); color: #fff; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <div>
+      <h1>Legal Document Editor</h1>
+      <a href="/">← Back to DOCX Formatting Viewer</a>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" id="btnExportJson" title="Get editor data as JSON">Export JSON</button>
+      <button type="button" class="btn btn-primary" id="btnDownloadDocx" title="Convert HTML to DOCX and download">Download as DOCX</button>
+    </div>
+  </header>
+
+  <main class="editor-wrap">
+    <div id="editor"></div>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.ckeditor.com/ckeditor5/41.4.2/super-build/ckeditor.js"></script>
+  <script>
+    (function () {
+      const editorEl = document.getElementById("editor");
+      const btnExportJson = document.getElementById("btnExportJson");
+      const btnDownloadDocx = document.getElementById("btnDownloadDocx");
+      const toastEl = document.getElementById("toast");
+
+      function showToast(message, type) {
+        toastEl.textContent = message;
+        toastEl.className = "toast " + (type || "success");
+        toastEl.classList.remove("hidden");
+        setTimeout(function () {
+          toastEl.classList.add("hidden");
+        }, 4000);
+      }
+
+      // Legal-focused placeholder when no content is loaded
+      const defaultHtml = "<p><strong>SUMMONS</strong></p>\n<p style=\"text-align: center;\">Supreme Court of the State of New York</p>\n<p style=\"text-align: center;\">County of __________</p>\n<p>&nbsp;</p>\n<p>To the above-named defendant:</p>\n<p>You are hereby summoned to answer the complaint in this action.</p>\n<p>&nbsp;</p>";
+
+      function getLoadToken() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("load") || params.get("token") || "";
+      }
+
+      function initEditor(initialHtml) {
+        const html = (initialHtml && initialHtml.trim()) ? initialHtml : defaultHtml;
+      const config = {
+        placeholder: "Type or paste your legal document here. Use the toolbar for headings, bold, italic, alignment, lists, and tables.",
+        toolbar: {
+          items: [
+            "heading", "|",
+            "bold", "italic", "underline", "strikethrough", "removeFormat", "|",
+            "alignment", "|",
+            "bulletedList", "numberedList", "|",
+            "insertTable", "horizontalLine", "|",
+            "undo", "redo", "|",
+            "sourceEditing"
+          ],
+          shouldNotGroupWhenFull: true
+        },
+        heading: {
+          options: [
+            { model: "paragraph", title: "Paragraph", class: "ck-heading_paragraph" },
+            { model: "heading1", view: "h1", title: "Heading 1", class: "ck-heading_heading1" },
+            { model: "heading2", view: "h2", title: "Heading 2", class: "ck-heading_heading2" },
+            { model: "heading3", view: "h3", title: "Heading 3", class: "ck-heading_heading3" }
+          ]
+        },
+        table: {
+          contentToolbar: [ "tableColumn", "tableRow", "mergeTableCells" ]
+        },
+        removePlugins: [
+          "ExportPdf", "ExportWord",
+          "AIAssistant", "CKBox", "CKFinder", "EasyImage",
+          "MultiLevelList", "RealTimeCollaborativeComments", "RealTimeCollaborativeTrackChanges",
+          "RealTimeCollaborativeRevisionHistory", "PresenceList", "Comments", "TrackChanges",
+          "TrackChangesData", "RevisionHistory", "Pagination", "WProofreader", "MathType",
+          "SlashCommand", "Template", "DocumentOutline", "FormatPainter", "TableOfContents",
+          "PasteFromOfficeEnhanced", "CaseChange"
+        ]
+      };
+
+      CKEDITOR.ClassicEditor.create(editorEl, config)
+        .then(function (editor) {
+          editor.setData(html);
+
+          btnExportJson.addEventListener("click", function () {
+            const data = editor.getData();
+            const json = JSON.stringify({ html: data });
+            const blob = new Blob([json], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "document-content.json";
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast("JSON exported.");
+          });
+
+          btnDownloadDocx.addEventListener("click", function () {
+            const html = editor.getData();
+            if (!html || html.replace(/<[^>]+>/g, "").replace(/\s/g, "").length === 0) {
+              showToast("Document is empty. Add content first.", "error");
+              return;
+            }
+            btnDownloadDocx.disabled = true;
+            fetch("/ckeditor/api/export-docx", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ html: html })
+            })
+              .then(function (res) {
+                if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || "Export failed"); });
+                return res.blob();
+              })
+              .then(function (blob) {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "document.docx";
+                a.click();
+                URL.revokeObjectURL(a.href);
+                showToast("DOCX downloaded.");
+              })
+              .catch(function (err) {
+                showToast(err.message || "Export failed.", "error");
+              })
+              .finally(function () {
+                btnDownloadDocx.disabled = false;
+              });
+          });
+        })
+        .catch(function (err) {
+          console.error(err);
+          editorEl.innerHTML = "<p style=\"color: var(--error);\">Failed to load CKEditor 5. Check the console.</p>";
+        });
+      }
+
+      const loadToken = getLoadToken();
+      if (loadToken) {
+        fetch("/ckeditor/api/load?token=" + encodeURIComponent(loadToken))
+          .then(function (res) {
+            if (!res.ok) throw new Error("Content not found or expired");
+            return res.json();
+          })
+          .then(function (data) {
+            initEditor(data.html || "");
+          })
+          .catch(function () {
+            showToast("Formatted content could not be loaded. Opening with default text.", "error");
+            initEditor(defaultHtml);
+          });
+      } else {
+        initEditor(defaultHtml);
+      }
+    })();
+  </script>
+</body>
+</html>

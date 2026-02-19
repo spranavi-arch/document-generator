@@ -1,15 +1,27 @@
 """
-Simple web UI: upload a .docx file and view its paragraph formatting.
+Simple web UI: upload a .docx file and view its paragraph formatting;
+CKEditor 5 legal document editor at /ckeditor with DOCX export.
 Run: python app.py  then open http://127.0.0.1:5000
 """
 import io
+import sys
+from pathlib import Path
+
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 
 from format import extract_formatting_from_file
 
+# Allow importing formatting package from project root (for CKEditor blueprint)
+_root = Path(__file__).resolve().parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
+from ckeditor_bp import ckeditor_bp
+
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB max upload
+app.register_blueprint(ckeditor_bp)
 ALLOWED_EXTENSIONS = {"docx"}
 
 
@@ -40,4 +52,11 @@ def upload():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    import sys
+    # When run via "streamlit run app.py", Streamlit runs this in a worker thread;
+    # Flask's debug server uses signal handlers that only work in the main thread.
+    if "streamlit" in sys.modules:
+        # Flask app is loaded but not started; run Flask separately with: python app.py
+        pass
+    else:
+        app.run(debug=True, port=5000, use_reloader=False)

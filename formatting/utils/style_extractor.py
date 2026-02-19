@@ -146,6 +146,31 @@ def _extract_run_format(run):
     return _extract_run_format_from_font(run.font)
 
 
+def _merge_run_formats(run_formats: list[dict]) -> dict:
+    """Merge run format dicts: set bold/italic/underline only when ALL runs have them (avoids making whole paragraph bold when only some words are bold in template). Font/size from first set."""
+    if not run_formats:
+        return {}
+    out = {}
+    for key in ("bold", "italic", "underline"):
+        # Only set True when every run has it, so selective bold in template is not applied to whole paragraph
+        if run_formats and all(rf.get(key) for rf in run_formats):
+            out[key] = True
+    for key in ("name", "size_pt", "color_rgb_hex"):
+        for rf in run_formats:
+            if rf.get(key) is not None and rf.get(key) != "":
+                out[key] = rf[key]
+                break
+    return out
+
+
+def _extract_run_format_from_paragraph(para) -> dict:
+    """Extract run format from a paragraph; bold/italic/underline only set when all runs have them (preserves selective formatting)."""
+    if not para or not para.runs:
+        return {}
+    run_formats = [_extract_run_format(r) for r in para.runs]
+    return _merge_run_formats(run_formats)
+
+
 def _format_from_style_definition(doc: Document, style_name: str) -> dict | None:
     """Extract paragraph_format (and optionally font) from the style definition when no paragraph uses it."""
     try:
@@ -246,9 +271,7 @@ def _sample_formatting_per_style(doc: Document) -> dict:
             continue
         seen_styles.add(style_name)
         pf = _extract_paragraph_format(para.paragraph_format)
-        run_fmt = {}
-        if para.runs:
-            run_fmt = _extract_run_format(para.runs[0])
+        run_fmt = _extract_run_format_from_paragraph(para)
         if pf or run_fmt:
             style_formatting[style_name] = {
                 "paragraph_format": pf,
@@ -536,6 +559,22 @@ def build_section_formatting_prompts(template_content: list, style_formatting: d
     return "\n".join(lines)
 
 
+def build_formatting_instructions(
+    style_map: dict,
+    style_formatting: dict,
+    template_content: list,
+    all_style_names: list = None,
+) -> str:
+    """Single combined block for the LLM: style guide + per-section formatting (one pass over data)."""
+    style_guide = build_style_guide(
+        style_map=style_map,
+        style_formatting=style_formatting,
+        all_style_names=all_style_names,
+    )
+    section_prompts = build_section_formatting_prompts(template_content, style_formatting)
+    return style_guide + ("\n\n" + section_prompts if section_prompts else "")
+
+
 def iter_body_blocks(doc: Document):
     """
     Yield (paragraph, table_id, row, col) in document order.
@@ -674,9 +713,7 @@ def extract_template_structure(doc: Document, max_paragraphs: int = 500) -> list
             style_name = "Normal"
         pf = para.paragraph_format
         paragraph_format = _extract_paragraph_format(pf) if pf else {}
-        run_format = {}
-        if para.runs:
-            run_format = _extract_run_format(para.runs[0])
+        run_format = _extract_run_format_from_paragraph(para)
         page_break_before = False
         try:
             if pf and getattr(pf, "page_break_before", None):
@@ -707,6 +744,7 @@ def extract_template_structure(doc: Document, max_paragraphs: int = 500) -> list
             "template_text": template_text,
             "page_break_before": page_break_before,
             "hint": hint,
+            "text": text,
         }
         if table_id is not None:
             spec["table_id"] = table_id
@@ -750,6 +788,12 @@ def extract_document_blueprint(doc: Document) -> dict:
     Extract the complete style and layout blueprint: styles, sections, tables, lists, document_layout.
     Formatting metadata only (no document text except as identifiers). Machine-readable schema
     for programmatic application to another document.
+
+    Every distinct layout role (e.g. centered title, right-aligned attorney block, two-column
+    signature) is represented: each paragraph style has its own paragraph_format (alignment,
+    spacing, indent, tab_stops) and run_format (bold, italic, font). Sections list each block's
+    style and formatting so the formatter can match the template; non-body blocks keep this
+    alignment and run_format instead of being overwritten by legal defaults.
     """
     para_names = _get_paragraph_style_names(doc)
     style_formatting = _sample_formatting_per_style(doc)
@@ -880,28 +924,23 @@ def _get_numbering_from_template(doc: Document) -> tuple[int | None, int, str | 
     return (None, 0, None)
 
 
-def extract_styles(doc: Document) -> dict:
-    """Extract paragraph style names, style map, per-style formatting, and template content for LLM."""
+def build_style_map_from_doc(doc: Document) -> tuple[dict, int | None, int]:
+    """Build style_map and numbering from document (shared by extract_styles and formatter fallback).
+    Returns (style_map, numbered_num_id, numbered_ilvl)."""
     para_names = _get_paragraph_style_names(doc)
     if not para_names:
-        return {"paragraph_style_names": [], "style_map": {}, "style_formatting": {}}
-
+        return ({}, None, 0)
     heading_like = [
         n for n in para_names
         if any(kw in n.lower() for kw in ("heading", "title", "titre", "section"))
     ]
     list_like = [n for n in para_names if "list" in n.lower() or "number" in n.lower()]
-
     h1 = _pick_style(para_names, PREFERRED_HEADING_1, heading_like)
     h2 = _pick_style(para_names, PREFERRED_HEADING_2, [n for n in heading_like if n != h1])
     normal = _pick_style(para_names, PREFERRED_NORMAL, para_names)
     list_style = _pick_style(para_names, PREFERRED_LIST, list_like) if list_like else normal
-
-    # Numbered style: use the template's own style from its first numbered paragraph (no hardcoding).
-    # If template has no numPr, fall back to list-like style by name.
     numbered_num_id, numbered_ilvl, numbered_style_from_template = _get_numbering_from_template(doc)
     numbered_style = numbered_style_from_template if (numbered_style_from_template and numbered_style_from_template in para_names) else list_style
-
     style_map = {
         "heading": h1 or normal,
         "section_header": h2 or h1 or normal,
@@ -909,7 +948,16 @@ def extract_styles(doc: Document) -> dict:
         "numbered": numbered_style,
         "wherefore": h2 or h1 or normal,
     }
+    return (style_map, numbered_num_id, numbered_ilvl)
 
+
+def extract_styles(doc: Document) -> dict:
+    """Extract paragraph style names, style map, per-style formatting, and template content for LLM."""
+    para_names = _get_paragraph_style_names(doc)
+    if not para_names:
+        return {"paragraph_style_names": [], "style_map": {}, "style_formatting": {}}
+
+    style_map, numbered_num_id, numbered_ilvl = build_style_map_from_doc(doc)
     style_formatting = _sample_formatting_per_style(doc)
     style_formatting = _enrich_style_formatting_from_definitions(doc, style_map, style_formatting)
     style_formatting = _apply_default_spacing_and_indent(style_map, style_formatting)
@@ -924,22 +972,48 @@ def extract_styles(doc: Document) -> dict:
             rf["italic"] = False
             style_formatting[style_name] = {**fmt, "paragraph_format": pf, "run_format": rf}
     line_samples = _extract_line_samples(doc)
+
+    # Single source of truth: template_structure; derive template_content and section_heading_samples from it
+    template_structure = extract_template_structure(doc, max_paragraphs=500)
+    max_content_paras = 120
+    max_text_per_para = 400
+    template_content = [
+        {"style": s["style"], "text": ((s.get("text") or "")[:max_text_per_para] + ("..." if len(s.get("text") or "") > max_text_per_para else ""))}
+        for s in template_structure[:max_content_paras]
+    ]
+    seen_heading = set()
+    section_heading_samples = []
+    for s in template_structure:
+        if not s.get("page_break_before"):
+            continue
+        t = (s.get("text") or "").strip()
+        if not t or len(t) < 2:
+            continue
+        key = t.lower()
+        if key in seen_heading:
+            continue
+        seen_heading.add(key)
+        section_heading_samples.append(key)
+    tables = extract_tables(doc)
+
     style_guide = build_style_guide(
         style_map=style_map,
         style_formatting=style_formatting,
         all_style_names=para_names,
     )
-
-    template_content = get_template_content_with_styles(doc)
-    section_heading_samples = _extract_section_heading_samples(doc)
-    template_structure = extract_template_structure(doc)
-    tables = extract_tables(doc)
+    formatting_instructions = build_formatting_instructions(
+        style_map=style_map,
+        style_formatting=style_formatting,
+        template_content=template_content,
+        all_style_names=para_names,
+    )
 
     return {
         "paragraph_style_names": para_names,
         "style_map": style_map,
         "style_formatting": style_formatting,
         "style_guide": style_guide,
+        "formatting_instructions": formatting_instructions,
         "line_samples": line_samples,
         "template_content": template_content,
         "section_heading_samples": section_heading_samples,

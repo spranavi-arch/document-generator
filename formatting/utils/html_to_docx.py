@@ -84,8 +84,8 @@ def _legal_paragraph_format(text: str) -> dict:
     # Court header: center
     if "supreme court" in lower and ("new york" in lower or "state" in lower) or (t.startswith("COUNTY OF") and len(t) < 50):
         out["alignment"] = "center"
-    # Document title: center + bold
-    elif t in ("SUMMONS", "VERIFIED COMPLAINT", "COMPLAINT") or (len(t) < 25 and t.isupper() and "cause" not in lower):
+    # Document title: center + bold (NOTICE OF CLAIM, SUMMONS, etc.)
+    elif t in ("SUMMONS", "VERIFIED COMPLAINT", "COMPLAINT", "NOTICE OF CLAIM") or (len(t) < 30 and t.isupper() and "cause" not in lower):
         out["alignment"] = "center"
         out["bold"] = True
     # Jury trial / Attorneys for: center + italic
@@ -122,12 +122,21 @@ def _is_separator_line_only(runs):
     return all(c in " _-.=\t\u00A0" for c in text)
 
 
+def _strip_html_to_text(html_fragment: str) -> str:
+    """Strip tags and decode entities for table cell text."""
+    if not html_fragment:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", html_fragment)
+    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
+    return " ".join(text.split()).strip()
+
+
 class _SimpleHTMLParser(HTMLParser):
-    """Parse HTML into blocks: paragraphs (alignment, runs), list items, separators, underlines."""
+    """Parse HTML into blocks: paragraphs (alignment, runs), list items, separators, underlines, tables."""
 
     def __init__(self):
         super().__init__()
-        self.blocks = []  # each: {block_type, alignment?, runs?, list_item?, list_num?, thin?}
+        self.blocks = []  # each: {block_type, alignment?, runs?, list_item?, list_num?, thin?, rows?}
         self._current_runs = []
         self._current_align = None
         self._bold = False
@@ -138,6 +147,11 @@ class _SimpleHTMLParser(HTMLParser):
         self._current_block_tag = None  # "p", "li", etc.
         self._in_ol = False
         self._list_num = 0
+        # Table state (CKEditor 5 and other rich editors)
+        self._in_table = False
+        self._table_rows = []  # list of list of cell text
+        self._current_row = []
+        self._current_cell_parts = []
 
     def _current_font(self):
         return self._font_stack[-1] if self._font_stack else None
@@ -183,7 +197,29 @@ class _SimpleHTMLParser(HTMLParser):
         else:
             self.blocks.append({"block_type": "separator"})
 
+    def _flush_table_cell(self):
+        cell_text = _strip_html_to_text("".join(self._current_cell_parts)) if self._current_cell_parts else ""
+        self._current_row.append(cell_text)
+        self._current_cell_parts = []
+
     def handle_starttag(self, tag, attrs):
+        if self._in_table:
+            if tag in ("td", "th"):
+                self._current_cell_parts = []
+            elif tag in ("tr", "thead", "tbody", "tfoot"):
+                if tag == "tr":
+                    self._flush_table_cell()
+                    if self._current_row:
+                        self._table_rows.append(self._current_row)
+                    self._current_row = []
+            return
+        if tag == "table":
+            self._end_block()
+            self._in_table = True
+            self._table_rows = []
+            self._current_row = []
+            self._current_cell_parts = []
+            return
         if tag in ("p", "div", "h1", "h2", "h3", "h4", "h5", "h6"):
             self._start_block(attrs, tag=tag)
         elif tag == "hr":
@@ -210,6 +246,25 @@ class _SimpleHTMLParser(HTMLParser):
             self._current_runs.append(("\n", self._bold, self._italic, self._underline, self._current_font()))
 
     def handle_endtag(self, tag):
+        if self._in_table:
+            if tag in ("td", "th"):
+                self._flush_table_cell()
+            elif tag == "tr":
+                self._flush_table_cell()
+                if self._current_row:
+                    self._table_rows.append(self._current_row)
+                self._current_row = []
+            elif tag == "table":
+                self._flush_table_cell()
+                if self._current_row:
+                    self._table_rows.append(self._current_row)
+                if self._table_rows:
+                    self.blocks.append({"block_type": "table", "rows": list(self._table_rows)})
+                self._in_table = False
+                self._table_rows = []
+                self._current_row = []
+                self._current_cell_parts = []
+            return
         if tag in ("p", "div", "h1", "h2", "h3", "h4", "h5", "h6"):
             self._end_block()
         elif tag == "ol":
@@ -227,6 +282,10 @@ class _SimpleHTMLParser(HTMLParser):
             self._underline = False
 
     def handle_data(self, data):
+        if self._in_table:
+            if self._current_cell_parts is not None:
+                self._current_cell_parts.append(data)
+            return
         if self._in_block and data:
             self._current_runs.append((data, self._bold, self._italic, self._underline, self._current_font()))
 
@@ -272,6 +331,28 @@ def html_to_docx_bytes(html: str, font_name: str | None = None, font_size_pt: fl
     FIRST_LINE_INDENT = Inches(-0.5)
     for block in parser.blocks:
         block_type = block.get("block_type", "paragraph")
+
+        if block_type == "table":
+            table_rows = block.get("rows") or []
+            if not table_rows:
+                continue
+            num_cols = max(len(r) for r in table_rows) if table_rows else 0
+            if num_cols == 0:
+                continue
+            # Pad rows so all have the same number of columns
+            padded = [list(row) + [""] * (num_cols - len(row)) for row in table_rows]
+            num_rows = len(padded)
+            table = doc.add_table(rows=num_rows, cols=num_cols)
+            table.style = "Table Grid"
+            for ri, row_cells in enumerate(padded):
+                for ci, cell_text in enumerate(row_cells):
+                    cell = table.rows[ri].cells[ci]
+                    cell.text = (cell_text or "").strip()
+                    for p in cell.paragraphs:
+                        for r in p.runs:
+                            r.font.name = font_name
+                            r.font.size = Pt(font_size_pt)
+            continue
 
         if block_type == "separator":
             p = doc.add_paragraph()

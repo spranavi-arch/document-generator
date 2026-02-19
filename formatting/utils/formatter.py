@@ -1,7 +1,6 @@
 import re
 
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING, WD_TAB_ALIGNMENT, WD_TAB_LEADER, WD_UNDERLINE
-from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
@@ -11,16 +10,35 @@ try:
     from utils.html_to_docx import _paragraph_border_bottom
 except Exception:
     _paragraph_border_bottom = None
-
-# Preferred style names to look for in the uploaded document (in order of preference)
-PREFERRED_HEADING_1 = ("Heading 1", "Title", "Titre 1")
-PREFERRED_HEADING_2 = ("Heading 2", "Subtitle", "Titre 2", "Section")
-PREFERRED_NORMAL = ("Normal", "Body Text", "Paragraphe")
-PREFERRED_LIST = ("List Number", "List Paragraph", "List")
+from utils.style_extractor import build_style_map_from_doc
 
 # Unicode checkbox characters for rendering
 CHECKBOX_UNCHECKED = "\u2610"  # ☐
 CHECKBOX_CHECKED = "\u2611"    # ☑
+
+
+def parse_inline_formatting_markers(text: str) -> list[tuple[str, bool, bool, bool]]:
+    """Parse **bold**, *italic*, and __underline__ in text; return list of (segment_text, bold, italic, underline)."""
+    if not text or not isinstance(text, str):
+        return [("", False, False, False)]
+    # Split by **, __, and * (order: ** and __ before * so __ is one token)
+    tokens = re.split(r"(\*\*|__|\*)", text)
+    segments = []
+    bold = False
+    italic = False
+    underline = False
+    for t in tokens:
+        if t == "**":
+            bold = not bold
+        elif t == "__":
+            underline = not underline
+        elif t == "*":
+            italic = not italic
+        else:
+            if t:
+                segments.append((t, bold, italic, underline))
+    return segments if segments else [("", False, False, False)]
+
 
 # Phrases that indicate address/signature block—do not auto-number these even when using list style
 NOT_LIST_CONTENT_PHRASES = (
@@ -151,52 +169,6 @@ def _split_allegation_block(text: str) -> list[str]:
     return out if out else [text]
 
 
-def _get_paragraph_style_names(doc):
-    """Return list of paragraph style names defined in the document."""
-    return [
-        s.name for s in doc.styles
-        if s.type == WD_STYLE_TYPE.PARAGRAPH
-    ]
-
-
-def _pick_style(doc, preferred_names, fallback_names=None):
-    """Return the first preferred style name that exists in the document, else first fallback."""
-    available = _get_paragraph_style_names(doc)
-    for name in preferred_names:
-        if name in available:
-            return name
-    if fallback_names:
-        for name in fallback_names:
-            if name in available:
-                return name
-    return available[0] if available else None
-
-
-def _build_style_map_from_doc(doc):
-    """Build a block_type -> style_name map using only styles present in the document."""
-    para_names = _get_paragraph_style_names(doc)
-    if not para_names:
-        return None
-
-    # Heading-like: names containing "heading", "title", "titre" (case-insensitive), in stable order
-    heading_like = [n for n in para_names if any(kw in n.lower() for kw in ("heading", "title", "titre", "section"))]
-    # List-like
-    list_like = [n for n in para_names if "list" in n.lower() or "number" in n.lower()]
-
-    h1 = _pick_style(doc, PREFERRED_HEADING_1, heading_like)
-    h2 = _pick_style(doc, PREFERRED_HEADING_2, [n for n in heading_like if n != h1])
-    normal = _pick_style(doc, PREFERRED_NORMAL, para_names)
-    list_style = _pick_style(doc, PREFERRED_LIST, list_like) if list_like else normal
-
-    return {
-        "heading": h1 or normal,
-        "section_header": h2 or h1 or normal,
-        "paragraph": normal,
-        "numbered": list_style,
-        "wherefore": h2 or h1 or normal,
-    }
-
-
 # Style names that are body text — always justify, never center; never inherit template italic
 BODY_STYLE_NAMES = ("normal", "body text", "list paragraph", "list number", "list")
 
@@ -222,18 +194,13 @@ def _block_type_for_alignment(block_kind: str, section_type: str, style_name: st
 
 
 def enforce_legal_alignment(block_type: str, paragraph):
-    """Override alignment: left for captions/headings/signatures; justify for body; consistent legal layout."""
+    """Override alignment only for body text (justify). Non-body blocks keep template alignment (center, right, etc.)."""
     if not paragraph:
         return
     try:
-        if block_type in ("heading", "section_header"):
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        elif block_type in ("paragraph", "numbered", "body"):
+        if block_type in ("paragraph", "numbered", "body"):
             paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        elif block_type in ("signature", "address", "to_section"):
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        elif block_type == "line":
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        # heading, section_header, signature, address, to_section, line: leave as set by _apply_paragraph_format (template)
     except Exception:
         pass
 
@@ -268,7 +235,7 @@ def force_legal_run_format(paragraph):
 
 
 def force_legal_run_format_document(doc):
-    """Force black color and no italic on every paragraph in the document."""
+    """Force black color and no italic on every paragraph so body text is never italicised (template/LLM can assign heading styles to body)."""
     if not doc:
         return
     try:
@@ -374,10 +341,15 @@ def _is_section_start(
     return False
 
 
-def _add_paragraph_with_inline_formatting(doc, segments: list[tuple[str, bool, bool]], style, run_fmt_base: dict):
-    """Add a paragraph with multiple runs for bold/italic segments. style and run_fmt_base from template."""
+def _add_paragraph_with_inline_formatting(doc, segments: list[tuple], style, run_fmt_base: dict):
+    """Add a paragraph with multiple runs for bold/italic/underline segments. Each segment is (text, bold, italic, underline)."""
     p = doc.add_paragraph(style=style)
-    for seg_text, bold, italic in segments:
+    for seg in segments:
+        if len(seg) == 4:
+            seg_text, bold, italic, underline = seg
+        else:
+            seg_text, bold, italic = seg[0], seg[1], seg[2]
+            underline = False
         if not seg_text:
             continue
         run = p.add_run(seg_text)
@@ -386,6 +358,8 @@ def _add_paragraph_with_inline_formatting(doc, segments: list[tuple[str, bool, b
             fmt["bold"] = True
         if italic:
             fmt["italic"] = True
+        if underline:
+            fmt["underline"] = True
         _apply_run_format(run, fmt)
     return p
 
@@ -447,13 +421,9 @@ def _apply_run_format(run, fmt: dict):
             font.size = Pt(fmt["size_pt"])
     except Exception:
         pass
-    # Force black text and no italic (legal standard); do not copy template color (e.g. blue) or italic
+    # Force black text (legal standard); do not copy template color (e.g. blue). Italic is preserved from fmt for non-body; body gets no-italic in force_legal_run_format_document.
     try:
         font.color.rgb = RGBColor(0, 0, 0)
-    except Exception:
-        pass
-    try:
-        font.italic = False
     except Exception:
         pass
 
@@ -580,18 +550,31 @@ def _apply_numbered_paragraph_layout(paragraph):
         pass
 
 
+def _space_pt(pf_attr) -> float | None:
+    """Return paragraph format space value in pt, or None if unset/zero."""
+    if pf_attr is None:
+        return None
+    if hasattr(pf_attr, "pt"):
+        return getattr(pf_attr, "pt", None)
+    return float(pf_attr) if isinstance(pf_attr, (int, float)) else None
+
+
 def _apply_section_spacing(paragraph, text: str, is_court_caption: bool):
-    """Set space_before for section starters and space_after for caption lines so sections are well-separated."""
+    """Add space_before/space_after only when the template did not already set them (preserve court-style spacing)."""
     if not paragraph:
         return
     try:
         pf = paragraph.paragraph_format
-        if _is_section_starter(text):
+        before_pt = _space_pt(getattr(pf, "space_before", None))
+        after_pt = _space_pt(getattr(pf, "space_after", None))
+        if _is_section_starter(text) and (before_pt is None or before_pt == 0):
             pf.space_before = Pt(SPACE_BEFORE_SECTION_PT)
         if _looks_like_cause_of_action_heading(text):
-            pf.space_before = Pt(SPACE_BEFORE_SECTION_PT)
-            pf.space_after = Pt(SPACE_AFTER_CAPTION_PT)
-        if is_court_caption:
+            if before_pt is None or before_pt == 0:
+                pf.space_before = Pt(SPACE_BEFORE_SECTION_PT)
+            if after_pt is None or after_pt == 0:
+                pf.space_after = Pt(SPACE_AFTER_CAPTION_PT)
+        if is_court_caption and (after_pt is None or after_pt == 0):
             pf.space_after = Pt(SPACE_AFTER_CAPTION_PT)
     except Exception:
         pass
@@ -663,7 +646,7 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
     numbering, spacing from style definitions. Renderer never invents formatting.
     numbered_num_id/numbered_ilvl: when set, paragraphs with the numbered style get list numbering (1., 2., 3.)."""
     if style_map is None:
-        style_map = _build_style_map_from_doc(doc)
+        style_map = build_style_map_from_doc(doc)[0]
     if not style_map:
         style_map = {"heading": None, "section_header": None, "paragraph": None, "numbered": None, "wherefore": None}
     style_formatting = style_formatting or {}
@@ -716,8 +699,26 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
             if slot_text in seen:
                 continue
             seen.add(slot_text)
+            segments = parse_inline_formatting_markers(_render_checkboxes(slot_text))
+            run_fmt = (style_formatting.get(style) or {}).get("run_format") or {}
             p = doc.add_paragraph(style=style)
-            p.add_run(_render_checkboxes(slot_text))
+            for seg in segments:
+                if len(seg) == 4:
+                    seg_text, bold, italic, underline = seg
+                else:
+                    seg_text, bold, italic = seg[0], seg[1], seg[2]
+                    underline = False
+                if not seg_text:
+                    continue
+                run = p.add_run(seg_text)
+                fmt = dict(run_fmt)
+                if bold:
+                    fmt["bold"] = True
+                if italic:
+                    fmt["italic"] = True
+                if underline:
+                    fmt["underline"] = True
+                _apply_run_format(run, fmt)
             fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
             _apply_paragraph_format(p, fmt)
             align_type = _block_type_for_alignment(block_kind, section_type, style)
@@ -829,8 +830,9 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
                     one = re.sub(r"^[a-z][\.\)]\s*", "", one, count=1).strip()
                     one = re.sub(r"^[ivx]+[\.\)]\s*", "", one, count=1, flags=re.IGNORECASE).strip()
                     one = _render_checkboxes(one)
-                    segments = [(one, False, False)]
-                    _add_paragraph_with_inline_formatting(doc, segments, style, {})
+                    segments = parse_inline_formatting_markers(one)
+                    run_fmt = (style_formatting.get(style) or {}).get("run_format") or {}
+                    _add_paragraph_with_inline_formatting(doc, segments, style, run_fmt)
                     p = doc.paragraphs[-1] if doc.paragraphs else None
                     if p:
                         fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
@@ -869,14 +871,15 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
             if doc.paragraphs and not section_break_added_in_segment and _is_section_start(text, block_type, style_map, valid_style_names, section_heading_samples):
                 doc.add_page_break()
                 section_break_added_in_segment = True
-            # Do NOT hardcode numbers: strip leading "1." etc. so Word (via numPr/template style) supplies the number
-            if _looks_like_list_item(text):
+            # Strip leading "1." only for allegation-style numbered list (Word supplies via numPr). Keep "1.", "2." in NOTICE OF CLAIM / claim-form section headings.
+            if _looks_like_list_item(text) and style == style_map.get("numbered") and _starts_allegation((text or "").strip()):
                 text = re.sub(r"^\d+[\.\)]\s*", "", text).strip()
                 text = re.sub(r"^[a-z][\.\)]\s*", "", text, count=1).strip()
                 text = re.sub(r"^[ivx]+[\.\)]\s*", "", text, count=1, flags=re.IGNORECASE).strip()
             text = _render_checkboxes(text)
-            segments = [(text, False, False)]
-            _add_paragraph_with_inline_formatting(doc, segments, style, {})
+            segments = parse_inline_formatting_markers(text)
+            run_fmt = (style_formatting.get(style) or {}).get("run_format") or {}
+            _add_paragraph_with_inline_formatting(doc, segments, style, run_fmt)
             p = doc.paragraphs[-1] if doc.paragraphs else None
             if p:
                 fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}

@@ -8,6 +8,9 @@ from backend import extract_and_store_styles, process_document
 from utils.style_extractor import load_document_blueprint
 from utils.html_to_docx import html_to_docx_bytes, plain_text_to_simple_html, simple_html_to_plain_text
 
+# Base URL of the Flask app (CKEditor). Set CKEDITOR_FLASK_URL in .env if Flask runs elsewhere.
+CKEDITOR_FLASK_URL = os.environ.get("CKEDITOR_FLASK_URL", "http://127.0.0.1:5000")
+
 try:
     from streamlit_quill import st_quill
     HAS_QUILL = True
@@ -98,17 +101,51 @@ if template_file:
 
 generated_text = st.text_area("Enter the generated text", height=300)
 
+use_rule_based = os.environ.get("USE_SECTION_DETECTOR", "").strip().lower() in ("1", "true", "yes")
+use_rule_based = st.checkbox(
+    "Use rule-based formatting only (no LLM)",
+    value=use_rule_based,
+    help="Segment and label using legal heuristics (court caption, parties, headings, allegations, WHEREFORE, signature). Fast and deterministic; no API key required.",
+)
+
 if generated_text and template_file:
     if st.button("Format with LLM"):
-        with st.spinner("Calling LLM and building document…"):
+        with st.spinner("Calling LLM and building document…" if not use_rule_based else "Segmenting and formatting (rule-based)…"):
             try:
-                output_path, preview_text = process_document(generated_text, template_file)
+                output_path, preview_text = process_document(generated_text, template_file, use_section_detector=use_rule_based)
                 st.session_state["formatted_output_path"] = output_path
                 st.session_state["formatted_editor"] = preview_text
                 st.session_state["formatted_editor_html"] = plain_text_to_simple_html(preview_text)
+                st.session_state.pop("ckeditor_open_url", None)  # so user gets a fresh "Send to CKEditor" link
                 st.success("Document formatted successfully. Edit below with alignment and formatting, then download.")
             except Exception as e:
                 st.error(str(e))
+
+if st.session_state.get("formatted_output_path") or st.session_state.get("formatted_editor_html"):
+    # Option to open formatted content in CKEditor (Flask must be running at CKEDITOR_FLASK_URL)
+    if st.button("Send to CKEditor 5", key="send_to_ckeditor", help="Push formatted text to CKEditor and get a link to edit there."):
+        html_for_ckeditor = st.session_state.get("formatted_editor_html") or "<p><br></p>"
+        try:
+            import urllib.request
+            import json as _json
+            req = urllib.request.Request(
+                CKEDITOR_FLASK_URL.rstrip("/") + "/ckeditor/api/set-content",
+                data=_json.dumps({"html": html_for_ckeditor}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+                token = data.get("load_token")
+            if token:
+                st.session_state["ckeditor_open_url"] = CKEDITOR_FLASK_URL.rstrip("/") + "/ckeditor?load=" + token
+            else:
+                st.session_state["ckeditor_open_url"] = None
+        except Exception as e:
+            st.error("Could not reach CKEditor (is Flask running?): " + str(e))
+            st.session_state["ckeditor_open_url"] = None
+    if st.session_state.get("ckeditor_open_url"):
+        st.link_button("Open in CKEditor 5", url=st.session_state["ckeditor_open_url"], help="Edit the formatted document in CKEditor (opens in a new tab).")
 
 if st.session_state.get("formatted_output_path") or st.session_state.get("formatted_editor_html"):
     st.subheader("Editor")
