@@ -353,14 +353,14 @@ CRITICAL:
 - Output must be a rearrangement/segmentation of the PROVIDED RAW TEXT only.
 - If a required slot is not present in the raw text, output an empty string "".
 
-Task: (1) Use the template structure and style guide below to label every part of the raw text. (2) Output one block per logical segment with the correct block_type (exact template style name or line/signature_line/page_break).
+Task: (1) Divide the raw text into sections according to the uploaded document's structure (from the template content and/or images). (2) Match each section with the styling and formatting of the uploaded document: assign the exact template style name as block_type for each segment so the output mirrors the template section-by-section. (3) Output one block per logical segment with the correct block_type (exact template style name or line/signature_line/page_break).
 
 Rules (apply to any document type):
 - Match the template: use each style exactly as the template does (title style for main title, section style for section headings, body style for paragraphs, list style for list items).
 - One block per logical segment. Preserve exact wording.
-- Selective bold/italic/underline within a paragraph: use ** for bold, * for italic, and __ for underline in the text field. Example: against the **CITY OF NEW YORK** (hereinafter as *"respondent"*). Do not bold/italic entire paragraphs; use markers only where the template has selective emphasis. Do not bold words that are merely capitalized (e.g. "CLAIMANT'S" in body text stays regular unless the template bolds it).
+- Selective bold/italic/underline within a paragraph: use ** for bold, * for italic, and __ for underline in the text field. Example: against the **CITY OF NEW YORK** (hereinafter as *"respondent"*). Do not bold/italic entire paragraphs; use markers only where the template has selective emphasis. Do not bold words that are merely capitalized (e.g. "CLAIMANT'S" in body text stays regular unless the template bolds it). Italic (*): use for party roles when the template shows them italic (e.g. *Claimant,* *Respondent.*), for *-Against-* when on its own line if the template has it italic, and for defined terms in quotes (e.g. *"respondent"*).
 - NOTICE OF CLAIM (and similar claim forms): Bold (**) the document title "NOTICE OF CLAIM", claimant and respondent names (e.g. **ANTHONY SCHEMBRI**, **CITY OF NEW YORK**), **-Against-** when on its own line, "TO:" and addressee name (e.g. **TO: CITY OF NEW YORK**), **PLEASE TAKE NOTICE**, firm and attorney names (e.g. **SEELIG DRESSLER OCHANI, LLC**), key terms like **Personal Injury Action** or **TRIP AND FALL**, dates and addresses when the template emphasizes them (e.g. **NOVEMBER 2, 2025**, **349 EAST 51ST STREET, NEW YORK, NEW YORK 10022**), and section headings (e.g. **1. The name and address of claimant...** or **The nature of the claim:**). Use * only for defined terms in parentheses: *"respondent"*, *"claimant"*. Use __ for underlined phrases when the template underlines (e.g. __that municipal repairs,__). Leave all other body narrative, addresses, phone numbers, and plain capitalized words (e.g. "CLAIMANT'S" in the middle of a sentence) without ** or *.
-- Layout: Match the template's alignment (centered title, left-aligned caption and addresses, justified body paragraphs), spacing (tight or generous as in the template), and structure. If the template has a two-column layout (e.g. CLAIMANT left / ATTORNEYS right), output blocks in the same order as the template so content flows into the correct columns.
+- Layout: Match the template's alignment. Center-align the starting part of the notice: document title (NOTICE OF CLAIM), "In the Matter of the Claim of:", plaintiff/claimant name, defendant/respondent name, "-Against-", and party roles (Claimant, Respondent). Left-align TO:, addresses, and body. For plaintiff and defendant names on one row (or firm name and claimant name on one row in point 1), use a single tab character between the two so they align (e.g. **SEELIG DRESSLER OCHANI, LLC**\t**ANTHONY SCHEMBRI** or **ANTHONY SCHEMBRI**, Claimant\t**CITY OF NEW YORK**, Respondent). If the template has a two-column layout, output blocks in the same order so content flows correctly.
 - Template fidelity (court-grade output): Preserve the template's structure; do not normalize or flatten. (1) Numbering: When the template has explicit numbered clauses (1., 2., 3., 4.)—e.g. "1. The name and post-office address of the claimant...", "2. The nature of the claim:"—output those numbers in the text of each block. Do not convert them to unnumbered headings. (2) Tabs: For tab-separated dual-column layout (e.g. firm name left, claimant name right on one line), use tab characters in the text where the template has column breaks so alignment is preserved. (3) Spacing and hierarchy: Output one block per logical segment in the same order as the template so the engine can apply the template's spacing, indentation, and alignment. (4) Separator lines: Use block_type line with the exact line characters from the template; keep centered separators as their own block so spacing is preserved.
 - Case number / date / caption -> use the template style used for that in the template (often right-aligned).
 - Addresses -> same style as in template; one block per line if the template breaks them.
@@ -417,6 +417,26 @@ def _call_openai(
         examples = [s.get("text", "")[:60] + ("..." if len(s.get("text", "")) > 60 else "") for s in line_samples[:5]]
         line_note = f"\nLine/separator samples (block_type 'line' or 'signature_line'): {examples}\n"
 
+    # Section structure of the uploaded document: order and style per section (so LLM divides raw text accordingly)
+    template_structure = style_schema.get("template_structure", [])
+    section_structure_block = ""
+    if template_structure:
+        lines = []
+        for i, spec in enumerate(template_structure[:80]):  # cap to avoid huge prompt
+            style_name = spec.get("style") or "Normal"
+            section_type = spec.get("section_type") or "body"
+            block_kind = spec.get("block_kind") or "paragraph"
+            hint = (spec.get("hint") or spec.get("text") or "")[:60]
+            if hint:
+                lines.append(f"  {i + 1}. [{style_name}] ({section_type}): {hint}")
+            else:
+                lines.append(f"  {i + 1}. [{style_name}] ({section_type})")
+        section_structure_block = (
+            "Section structure of the uploaded document (divide raw text into these sections; use the style in brackets as block_type for each):\n"
+            + "\n".join(lines)
+            + "\n\n"
+        )
+
     # Template content: how each paragraph was styled in the uploaded DOCX (so LLM can extract and apply formatting)
     template_content = style_schema.get("template_content", [])
     template_section = ""
@@ -436,14 +456,14 @@ def _call_openai(
         if lines:
             ocr_block = "OCR text extracted from template pages (use for layout/structure reference):\n\n" + "\n\n".join(lines) + "\n\n"
 
-    user_text = f"""{template_section}{ocr_block}Formatting instructions (use these exact style names as block_type):
+    user_text = f"""{section_structure_block}{template_section}{ocr_block}Formatting instructions (use these exact style names as block_type):
 
 {formatting_instructions}
 {line_note}
 
 ---
 
-Raw text to format. Match the template structure above: use the same styles for titles, section headings, body paragraphs, and lists as in the template. For causes of action (e.g. negligence): output each allegation (each "That on...", "By reason of...", etc.) as a separate block with the template's list/numbered style; do not add "1." or "2." in the text—numbering is applied from the template. Insert page_break where the template starts a new section on a new page. Include every part of the raw text to the very end—do not stop after the first signature block; if WHEREFORE, verification, SUMMONS AND VERIFIED COMPLAINT, certification, or NOTICE OF ENTRY appear later in the raw text, output blocks for all of them. In the text field use ** for bold, * for italic, and __ for underline only where the template has selective emphasis (e.g. NOTICE OF CLAIM: bold title, party names, -Against-, PLEASE TAKE NOTICE, firm names, key terms like Personal Injury Action, dates/addresses when emphasized; italic only for "respondent"/"claimant" in parentheses; underline only when the template underlines a phrase). Do not bold/italic entire paragraphs or plain capitalized words. Output a JSON array of {{"block_type": "<style name or line/signature_line/page_break>", "text": "<content>"}}.
+Raw text to format. (1) Divide it into sections according to the uploaded document structure above. (2) Match each section with the styling and formatting of the uploaded document: assign the block_type (style name) that the template uses for that section. Use the same styles for titles, section headings, body paragraphs, and lists as in the template. For causes of action (e.g. negligence): output each allegation (each "That on...", "By reason of...", etc.) as a separate block with the template's list/numbered style; do not add "1." or "2." in the text—numbering is applied from the template. Insert page_break where the template starts a new section on a new page. Include every part of the raw text to the very end—do not stop after the first signature block; if WHEREFORE, verification, SUMMONS AND VERIFIED COMPLAINT, certification, or NOTICE OF ENTRY appear later in the raw text, output blocks for all of them. In the text field use ** for bold, * for italic, and __ for underline only where the template has selective emphasis (e.g. NOTICE OF CLAIM: bold title, party names, -Against-, PLEASE TAKE NOTICE, firm names, key terms like Personal Injury Action, dates/addresses when emphasized; italic only for "respondent"/"claimant" in parentheses; underline only when the template underlines a phrase). Do not bold/italic entire paragraphs or plain capitalized words. Output a JSON array of {{"block_type": "<style name or line/signature_line/page_break>", "text": "<content>"}}.
 
 ---
 {text}
@@ -454,9 +474,10 @@ Raw text to format. Match the template structure above: use the same styles for 
     if page_images:
         vision_instruction = (
             "Formatting must follow the uploaded template document. The following images are each page of that template (Page 1, Page 2, ...). "
-            "Use these images as your primary reference for how to format the raw text: match the layout, spacing, indentation, headings, captions, "
-            "section structure, and placement of content on the page. Assign block_type and segment the raw text so the output document matches "
-            "the visual structure of these template pages. Then use the style guide and raw text below.\n\n"
+            "First, identify the sections of the template from these images (e.g. caption, court/parties, headings, body, signature). "
+            "Then divide the raw text into sections that correspond to the template's sections. "
+            "Match each section with the styling and formatting of the uploaded document: assign block_type (style name) and segment the raw text "
+            "so the output mirrors the template section-by-section in layout, spacing, indentation, and style. Then use the style guide and raw text below.\n\n"
         )
         content = [{"type": "text", "text": vision_instruction + "Template pages (use these for formatting reference):\n\n"}]
         for i, b64 in enumerate(page_images):

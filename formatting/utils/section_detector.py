@@ -8,6 +8,7 @@ import re
 
 from utils.legal_block_ontology import (
     BODY_PARAGRAPH,
+    BULLET_ITEM,
     CAPTION_PARTY,
     CAPTION_ROLE,
     CAPTION_SEPARATOR,
@@ -15,12 +16,20 @@ from utils.legal_block_ontology import (
     CAUSE_OF_ACTION_TITLE,
     COUNTY_LINE,
     COURT_HEADER,
+    DAMAGES_HEADING,
+    DATING_LINE,
     DOC_TITLE,
+    EMAIL_LINE,
     EMPTY,
+    FIRM_BLOCK_LINE,
+    JURAT_BLOCK,
     LEGAL_ALLEGATION,
     LINE,
+    LIST_INTRO,
+    MATTER_OF_LINE,
     NOTICE_TO_LINE,
     NUMBERED_PARAGRAPH,
+    PHONE_FAX_LINE,
     SECTION_HEADING,
     SIGNATURE_BLOCK,
     SIGNATURE_LINE,
@@ -71,11 +80,16 @@ def classify_paragraph(text: str) -> str:
     if t.strip().upper().startswith("WHEREFORE"):
         return WHEREFORE_CLAUSE
 
-    # Party caption: Plaintiff, Defendant, Petitioner, Respondent
+    # Allegation-style line that starts with "Respondent, its agents" / "Defendant, its agents" (before generic party check)
+    if re.match(r"^(Respondent|Defendant|Plaintiff),?\s+its\s+(agents|employees)", t, re.I):
+        return LEGAL_ALLEGATION
+
+    # Party caption: short lines with Plaintiff, Defendant, Petitioner, Respondent, Claimant (name or role only)
     if any(x in t for x in ("Plaintiff", "Defendant", "Petitioner", "Respondent", "Claimant")):
         if t.endswith(",") or t.endswith(".") or len(t) < 60:
             return CAPTION_ROLE if re.match(r"^(Plaintiff|Defendant|Petitioner|Respondent|Claimant)\,?\.?$", t, re.I) else CAPTION_PARTY
-        return CAPTION_PARTY
+        if len(t) < 80 and not re.search(r"\b(agents|servants|employees|negligent|careless|maintenance|inspection)\b", t, re.I):
+            return CAPTION_PARTY
 
     # Document title: short, ALL CAPS (SUMMONS, NOTICE OF CLAIM, etc.)
     if t.isupper() and len(t.split()) <= 12 and len(t) < 80:
@@ -87,6 +101,49 @@ def classify_paragraph(text: str) -> str:
     # TO: line (recipient)
     if t.upper().startswith("TO:") or t.upper().startswith("TO THE "):
         return NOTICE_TO_LINE
+
+    # "In the Matter of the Claim of:" (NOTICE OF CLAIM / caption preamble)
+    if re.match(r"^In\s+the\s+Matter\s+of\s+the\s+Claim\s+of\s*:?\s*$", t, re.I) or re.match(r"^In\s+the\s+Matter\s+of\s+", t, re.I) and len(t) < 60:
+        return MATTER_OF_LINE
+
+    # Jurat block: "STATE OF NEW YORK )", "COUNTY OF NASSAU ) ss.:"
+    if "ss." in t and ")" in t and ("STATE OF" in t.upper() or "COUNTY OF" in t.upper()):
+        return JURAT_BLOCK
+    if re.match(r"^(STATE|COUNTY)\s+OF\s+[A-Z\s]+\s*\)\s*$", t, re.I) or (re.match(r"^[A-Z\s]+\s+\)\s*$", t) and ("STATE" in t.upper() or "COUNTY" in t.upper())):
+        return JURAT_BLOCK
+
+    # Damages heading: "TOTAL DAMAGES ALLEGED:", "4. The damages, and injuries sustained:"
+    if "TOTAL DAMAGES ALLEGED" in t.upper() or ("DAMAGES" in t.upper() and "INJURIES SUSTAINED" in t.upper() and t.strip().endswith(":")):
+        return DAMAGES_HEADING
+    if re.match(r"^\d+\.\s+The\s+damages", t, re.I):
+        return DAMAGES_HEADING
+
+    # NOTICE OF CLAIM numbered points (1. The name and post-office address..., 2. The nature of the claim:, 3. The time when...)
+    t_no_num = re.sub(r"^\d+[\.\)]\s+", "", t).strip().lower()
+    if t_no_num.startswith("the name and post-office address of the claimant") or t_no_num.startswith("the nature of the claim") or t_no_num.startswith("the time when, the place where and the manner in which the claim arose") or t_no_num.startswith("the damages, and injuries sustained"):
+        return NUMBERED_PARAGRAPH
+
+    # List intro: "Attached hereto is:" / "Attached herein is:"
+    if re.match(r"^Attached\s+(hereto|herein|herewith)\s+is\s*:?\s*$", t, re.I) or (t.strip().endswith(":") and "attached" in t.lower() and len(t) < 50):
+        return LIST_INTRO
+
+    # Bullet item: starts with "- " or "• " (often after list intro)
+    if re.match(r"^[\-\•]\s+", t) or (t.strip().startswith("-") and len(t.strip()) > 2):
+        return BULLET_ITEM
+
+    # Dating line: "Dated: Mineola, New York" / "January _____, 2026"
+    if re.match(r"^Dated\s*:\s*", t, re.I) or (re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+_{2,}", t, re.I)):
+        return DATING_LINE
+
+    # Firm / address / contact lines (NOTICE OF CLAIM footer, verification block)
+    if re.match(r"^P:\s*\d|^F:\s*\d|^Fax\s*:", t, re.I) or (len(t) < 50 and re.match(r"^[\d\-\(\)\s\.]+$", t) and ("212-" in t or "516-" in t or "Tel" in t)):
+        return PHONE_FAX_LINE
+    if "@" in t and ("email" in t.lower() or ".com" in t.lower() or ".org" in t.lower()):
+        return EMAIL_LINE
+    if re.match(r"^\d+\s+[A-Za-z\s]+(Turnpike|Street|Avenue|Boulevard|Road|Drive|Lane),?\s*$", t) or re.match(r"^[A-Za-z\s]+,\s*(New York|NY)\s+\d{5}", t, re.I):
+        return BODY_PARAGRAPH  # address-like; keep as body or could add ADDRESS_BLOCK_LINE
+    if t.isupper() and len(t) < 60 and ("," in t or "LLC" in t or "P.C." in t or "PLLC" in t) and not t.endswith(":"):
+        return FIRM_BLOCK_LINE
 
     # Section headings: ALL CAPS, short, often ends with colon
     if t.isupper() and len(t.split()) <= 15:
@@ -101,7 +158,7 @@ def classify_paragraph(text: str) -> str:
     if t.isupper() and len(t.split()) <= 5 and len(t) < 40 and not t.endswith("."):
         return CAUSE_OF_ACTION_TITLE
 
-    # Legal allegation: starts with "That on...", "That at...", "By reason of...", etc.
+    # Legal allegation: starts with "That on...", "By reason of...", "It is alleged that...", "Respondent, its agents...", etc.
     allegation_starts = (
         r"^That\s+on\s+",
         r"^That\s+at\s+",
@@ -112,6 +169,12 @@ def classify_paragraph(text: str) -> str:
         r"^At\s+all\s+times\s+",
         r"^Plaintiff\s+repeats",
         r"^Upon\s+information",
+        r"^It\s+is\s+alleged\s+that\s+",
+        r"^Respondent,?\s+its\s+agents",
+        r"^All\s+respondent\s+had\s+",
+        r"^management,?\s+maintenance",
+        r"^The\s+injuries\s+sustained",
+        r"^Due\s+to\s+the\s+(dangerous|negligent)",
     )
     for pat in allegation_starts:
         if re.match(pat, t, re.I):

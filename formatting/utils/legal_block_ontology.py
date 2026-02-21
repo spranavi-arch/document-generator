@@ -10,6 +10,7 @@ COUNTY_LINE = "county_line"
 CAPTION_SEPARATOR = "caption_separator"
 CAPTION_PARTY = "caption_party"
 CAPTION_ROLE = "caption_role"
+MATTER_OF_LINE = "matter_of_line"  # "In the Matter of the Claim of:"
 VERSUS_LINE = "versus_line"
 DOC_TITLE = "doc_title"
 NOTICE_TO_LINE = "notice_to_line"
@@ -17,6 +18,7 @@ SECTION_HEADING = "section_heading"
 SECTION_HEADING_MAJOR = "section_heading_major"
 CAUSE_OF_ACTION_HEADING = "cause_of_action_heading"
 CAUSE_OF_ACTION_TITLE = "cause_of_action_title"
+DAMAGES_HEADING = "damages_heading"  # "4. The damages...", "TOTAL DAMAGES ALLEGED:"
 BODY_PARAGRAPH = "body_paragraph"
 LEGAL_ALLEGATION = "legal_allegation"
 NUMBERED_PARAGRAPH = "numbered_paragraph"
@@ -25,8 +27,15 @@ WHEREFORE_HEADING = "wherefore_heading"
 SIGNATURE_LINE = "signature_line"
 SIGNATURE_BLOCK = "signature_block"
 FIRM_BLOCK_LINE = "firm_block_line"
+ADDRESS_BLOCK_LINE = "address_block_line"
+PHONE_FAX_LINE = "phone_fax_line"
+EMAIL_LINE = "email_line"
 VERIFICATION_HEADING = "verification_heading"
 VERIFICATION_BODY = "verification_body"
+JURAT_BLOCK = "jurat_block"  # "STATE OF NEW YORK ) COUNTY OF NASSAU ) ss.:"
+DATING_LINE = "dating_line"  # "Dated: Mineola, New York" / "January _____, 2026"
+LIST_INTRO = "list_intro"  # "Attached hereto is:"
+BULLET_ITEM = "bullet_item"
 SUMMONS_BODY = "summons_body"
 LINE = "line"
 EMPTY = "empty"
@@ -39,6 +48,7 @@ ONTOLOGY_TO_STYLE_MAP_KEY = {
     CAPTION_SEPARATOR: "paragraph",
     CAPTION_PARTY: "heading",
     CAPTION_ROLE: "heading",
+    MATTER_OF_LINE: "heading",
     VERSUS_LINE: "heading",
     DOC_TITLE: "heading",
     NOTICE_TO_LINE: "section_header",
@@ -46,6 +56,7 @@ ONTOLOGY_TO_STYLE_MAP_KEY = {
     SECTION_HEADING_MAJOR: "section_header",
     CAUSE_OF_ACTION_HEADING: "section_header",
     CAUSE_OF_ACTION_TITLE: "section_header",
+    DAMAGES_HEADING: "section_header",
     BODY_PARAGRAPH: "paragraph",
     LEGAL_ALLEGATION: "numbered",
     NUMBERED_PARAGRAPH: "numbered",
@@ -54,8 +65,15 @@ ONTOLOGY_TO_STYLE_MAP_KEY = {
     SIGNATURE_LINE: "paragraph",
     SIGNATURE_BLOCK: "paragraph",
     FIRM_BLOCK_LINE: "paragraph",
+    ADDRESS_BLOCK_LINE: "paragraph",
+    PHONE_FAX_LINE: "paragraph",
+    EMAIL_LINE: "paragraph",
     VERIFICATION_HEADING: "section_header",
     VERIFICATION_BODY: "paragraph",
+    JURAT_BLOCK: "paragraph",
+    DATING_LINE: "paragraph",
+    LIST_INTRO: "paragraph",
+    BULLET_ITEM: "paragraph",
     SUMMONS_BODY: "paragraph",
     LINE: "paragraph",
     EMPTY: "paragraph",

@@ -171,6 +171,38 @@ def _extract_run_format_from_paragraph(para) -> dict:
     return _merge_run_formats(run_formats)
 
 
+def extract_bold_phrases_from_document(doc: Document) -> list[str]:
+    """
+    Extract every bold run (or consecutive bold runs) from the template as phrases.
+    Used to apply bold in generated text according to the uploaded sample, not just fixed keywords.
+    Returns a deduplicated list of phrases (min length 2) so the formatter can bold matching substrings.
+    """
+    collected = set()
+    for para, _tid, _r, _c in iter_body_blocks(doc):
+        if not para.runs:
+            continue
+        current = []
+        for run in para.runs:
+            try:
+                is_bold = getattr(run.font, "bold", None) is True
+            except Exception:
+                is_bold = False
+            text = (run.text or "").strip()
+            if is_bold and text:
+                current.append(text)
+            else:
+                if current:
+                    phrase = " ".join(current).strip()
+                    if len(phrase) >= 2:
+                        collected.add(phrase)
+                    current = []
+        if current:
+            phrase = " ".join(current).strip()
+            if len(phrase) >= 2:
+                collected.add(phrase)
+    return sorted(collected, key=lambda s: (-len(s), s))
+
+
 def _format_from_style_definition(doc: Document, style_name: str) -> dict | None:
     """Extract paragraph_format (and optionally font) from the style definition when no paragraph uses it."""
     try:
@@ -310,6 +342,9 @@ def _apply_default_spacing_and_indent(style_map: dict, style_formatting: dict) -
             pf["space_after"] = DEFAULT_SPACE_AFTER_PT
         if pf.get("first_line_indent") is None:
             pf["first_line_indent"] = DEFAULT_FIRST_LINE_INDENT_PT
+        if pf.get("line_spacing") is None:
+            pf["line_spacing"] = 1.0
+            pf["line_spacing_rule"] = "SINGLE"
         result[normal_style] = {**result[normal_style], "paragraph_format": pf}
     if list_style and list_style in result:
         pf = result[list_style].get("paragraph_format") or {}
@@ -320,6 +355,9 @@ def _apply_default_spacing_and_indent(style_map: dict, style_formatting: dict) -
             pf["first_line_indent"] = DEFAULT_NUMBERED_FIRST_LINE_INDENT_PT
         if pf.get("space_after") is None:
             pf["space_after"] = DEFAULT_SPACE_AFTER_PT
+        if pf.get("line_spacing") is None:
+            pf["line_spacing"] = 1.0
+            pf["line_spacing_rule"] = "SINGLE"
         result[list_style] = {**result[list_style], "paragraph_format": pf}
     return result
 
@@ -444,7 +482,7 @@ def build_style_guide(style_map: dict, style_formatting: dict, all_style_names: 
     lines = [
         "Extracted styles and formatting (from uploaded DOCX template)",
         "",
-        "Goal: Apply these styles to raw text so the output has the same structure and formatting as the template. Match how the template uses each style (title, section headings, body, numbered lists, etc.). Use the exact style name as block_type.",
+        "Goal: Identify sections in the input text and in the template; align and style output according to the template. Use the exact style name as block_type. Numbering (1., 2., 3. or a., b., etc.) and bold phrasing are taken from the template.",
         "",
         "Application rules (match template structure)",
         "",
@@ -631,6 +669,54 @@ def extract_tables(doc: Document) -> list[dict]:
             })
             table_index += 1
     return tables_out
+
+
+# Phrases that indicate right-column caption content (index no., document title) in a table
+_CAPTION_RIGHT_CELL_PHRASES = ("index no", "index number", "notice of motion", "to restore", "affirmation in support", "affidavit of service")
+
+
+def detect_caption_table_layout(template_structure: list[dict], tables: list[dict]) -> dict:
+    """
+    Detect if the template uses a table (or two-column layout) for the caption with index no. / document title
+    in the right column. Returns { "use_table": True, "table_index": 0, "rows": 1, "cols": 2 } when detected,
+    else { "use_table": False }.
+    """
+    if not template_structure or not tables:
+        return {"use_table": False}
+    caption_blocks_in_table = [s for s in template_structure if s.get("table_id") is not None and s.get("section_type") == "caption"]
+    if not caption_blocks_in_table:
+        return {"use_table": False}
+    table_id = caption_blocks_in_table[0].get("table_id")
+    if table_id is None or table_id >= len(tables):
+        return {"use_table": False}
+    tbl_info = tables[table_id]
+    cols = tbl_info.get("cols") or 0
+    if cols < 2:
+        return {"use_table": False}
+    # Check if any caption block in the right column (col >= 1) contains index no. / notice of motion
+    right_cell_text = " ".join(
+        (s.get("text") or s.get("hint") or "").lower() for s in caption_blocks_in_table if s.get("col", 0) >= 1
+    )
+    if not any(p in right_cell_text for p in _CAPTION_RIGHT_CELL_PHRASES):
+        # Also check cell_preview for the right column
+        cell_preview = tbl_info.get("cell_preview") or []
+        for row_preview in cell_preview:
+            if len(row_preview) >= 2:
+                right_preview = " ".join(row_preview[1:]).lower()
+                if any(p in right_preview for p in _CAPTION_RIGHT_CELL_PHRASES):
+                    return {
+                        "use_table": True,
+                        "table_index": table_id,
+                        "rows": tbl_info.get("rows") or 1,
+                        "cols": tbl_info.get("cols") or 2,
+                    }
+        return {"use_table": False}
+    return {
+        "use_table": True,
+        "table_index": table_id,
+        "rows": tbl_info.get("rows") or 1,
+        "cols": tbl_info.get("cols") or 2,
+    }
 
 
 def get_template_content_with_styles(doc: Document, max_paragraphs: int = 120, max_text_per_para: int = 400) -> list[dict]:
@@ -961,7 +1047,7 @@ def extract_styles(doc: Document) -> dict:
     style_formatting = _sample_formatting_per_style(doc)
     style_formatting = _enrich_style_formatting_from_definitions(doc, style_map, style_formatting)
     style_formatting = _apply_default_spacing_and_indent(style_map, style_formatting)
-    # Prevent template alignment/italic poisoning: body styles get no inherited center or italic
+    # Prevent template alignment/italic/bold poisoning: body styles get no inherited center, italic, or bold
     body_style_names = ("normal", "body text", "list paragraph", "list number", "list")
     for style_name in list(style_formatting.keys()):
         if (style_name or "").lower() in body_style_names:
@@ -970,6 +1056,7 @@ def extract_styles(doc: Document) -> dict:
             pf["alignment"] = None
             rf = (fmt.get("run_format") or {}).copy()
             rf["italic"] = False
+            rf["bold"] = False
             style_formatting[style_name] = {**fmt, "paragraph_format": pf, "run_format": rf}
     line_samples = _extract_line_samples(doc)
 
@@ -1007,6 +1094,8 @@ def extract_styles(doc: Document) -> dict:
         template_content=template_content,
         all_style_names=para_names,
     )
+    bold_phrases_from_template = extract_bold_phrases_from_document(doc)
+    caption_table_layout = detect_caption_table_layout(template_structure, tables)
 
     return {
         "paragraph_style_names": para_names,
@@ -1019,8 +1108,10 @@ def extract_styles(doc: Document) -> dict:
         "section_heading_samples": section_heading_samples,
         "template_structure": template_structure,
         "tables": tables,
+        "caption_table_layout": caption_table_layout,
         "numbered_num_id": numbered_num_id,
         "numbered_ilvl": numbered_ilvl,
+        "bold_phrases_from_template": bold_phrases_from_template,
     }
 
 

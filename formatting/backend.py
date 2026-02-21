@@ -14,8 +14,6 @@ from utils.formatter import (
     remove_trailing_empty_and_noise,
 )
 from utils.llm_formatter import format_text_with_llm
-from utils.section_detector import detect_blocks as detect_blocks_rule
-from utils.style_matcher import blocks_to_formatter_blocks
 from utils.style_extractor import (
     _paragraph_has_bottom_border,
     extract_document_blueprint,
@@ -31,6 +29,17 @@ DEFAULT_BOTTOM_MARGIN_IN = 1.25
 DEFAULT_LEFT_MARGIN_IN = 1.25
 DEFAULT_RIGHT_MARGIN_IN = 1.25
 
+
+def _apply_default_margins(doc):
+    """Ensure every section has at least default wide margins (proper spacing from page edges)."""
+    try:
+        for section in doc.sections:
+            section.top_margin = Inches(DEFAULT_TOP_MARGIN_IN)
+            section.bottom_margin = Inches(DEFAULT_BOTTOM_MARGIN_IN)
+            section.left_margin = Inches(DEFAULT_LEFT_MARGIN_IN)
+            section.right_margin = Inches(DEFAULT_RIGHT_MARGIN_IN)
+    except Exception:
+        pass
 
 
 def _project_dir():
@@ -61,72 +70,60 @@ def extract_and_store_styles(template_file) -> dict:
     return schema
 
 
-def process_document(generated_text, template_file, use_section_detector=False):
+def process_document(generated_text, template_file):
     """
     Input 1: Uploaded DOCX template (desired styles and formatting).
     Input 2: Raw legal text (unformatted).
     Segment and render entire text using template styles (no slot-fill).
-
-    When use_section_detector=True: use rule-based section detection only (no LLM). Fast and deterministic.
-    When use_section_detector=False: use LLM to segment and label; template page images are sent when available.
-    If LLM fails or returns no blocks, falls back to rule-based section detection.
+    Uses LLM to segment and label; template page images (and OCR text) are generated and sent to the LLM when available.
     """
     project_dir = _project_dir()
     doc = Document(template_file)
+    _apply_default_margins(doc)
 
     schema = extract_styles(doc)
     save_extracted_styles(schema, base_dir=project_dir)
 
-    template_page_images = []
-    template_page_ocr_texts = []
-    if not use_section_detector:
-        try:
-            template_file.seek(0)
-            data = template_file.read()
-            template_file.seek(0)
-            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-                tmp.write(data)
-                tmp.flush()
-                template_path = tmp.name
-            doc_for_images = Document(template_path)
-            force_single_column(doc_for_images)
-            fd, single_column_path = tempfile.mkstemp(suffix=".docx")
-            os.close(fd)
-            doc_for_images.save(single_column_path)
-            page_bytes = docx_to_page_images(single_column_path, dpi=150, max_pages=15)
-            if page_bytes:
-                template_page_images = [base64.b64encode(b).decode("ascii") for b in page_bytes]
-                schema["template_page_images"] = template_page_images
-                template_page_ocr_texts = ocr_page_images(page_bytes)
-                if template_page_ocr_texts and any(t.strip() for t in template_page_ocr_texts):
-                    schema["template_page_ocr_texts"] = template_page_ocr_texts
-            for path in (single_column_path, template_path):
-                if path and os.path.isfile(path):
-                    try:
-                        os.unlink(path)
-                    except OSError:
-                        pass
-        except Exception:
-            pass
+    # Always generate template page images so the LLM can use them when the LLM path is used
+    try:
+        template_file.seek(0)
+        data = template_file.read()
+        template_file.seek(0)
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp.write(data)
+            tmp.flush()
+            template_path = tmp.name
+        doc_for_images = Document(template_path)
+        force_single_column(doc_for_images)
+        fd, single_column_path = tempfile.mkstemp(suffix=".docx")
+        os.close(fd)
+        doc_for_images.save(single_column_path)
+        page_bytes = docx_to_page_images(single_column_path, dpi=150, max_pages=15)
+        if page_bytes:
+            schema["template_page_images"] = [base64.b64encode(b).decode("ascii") for b in page_bytes]
+            template_page_ocr_texts = ocr_page_images(page_bytes)
+            if template_page_ocr_texts and any(t.strip() for t in template_page_ocr_texts):
+                schema["template_page_ocr_texts"] = template_page_ocr_texts
+        for path in (single_column_path, template_path):
+            if path and os.path.isfile(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
     blocks = []
-    if use_section_detector:
-        ontology_blocks = detect_blocks_rule(generated_text or "")
-        blocks = blocks_to_formatter_blocks(ontology_blocks, schema.get("style_map") or {})
-    else:
-        try:
-            blocks = format_text_with_llm(
-                generated_text,
-                schema,
-                use_slot_fill=False,
-                template_page_images=template_page_images,
-                template_page_ocr_texts=template_page_ocr_texts if template_page_ocr_texts else None,
-            )
-        except Exception:
-            pass
-        if not blocks:
-            ontology_blocks = detect_blocks_rule(generated_text or "")
-            blocks = blocks_to_formatter_blocks(ontology_blocks, schema.get("style_map") or {})
+    try:
+        blocks = format_text_with_llm(
+            generated_text,
+            schema,
+            use_slot_fill=False,
+            template_page_images=schema.get("template_page_images") or [],
+            template_page_ocr_texts=schema.get("template_page_ocr_texts") or [],
+        )
+    except Exception:
+        pass
 
     clear_document_body(doc)
     # Preserve template's section/column layout (do not force single-column so two-column claimant/attorney blocks match template)
@@ -140,6 +137,8 @@ def process_document(generated_text, template_file, use_section_detector=False):
         template_structure=None,
         numbered_num_id=schema.get("numbered_num_id"),
         numbered_ilvl=schema.get("numbered_ilvl", 0),
+        bold_phrases_from_template=schema.get("bold_phrases_from_template"),
+        caption_table_layout=schema.get("caption_table_layout"),
     )
     force_legal_run_format_document(doc)
     remove_trailing_empty_and_noise(doc)

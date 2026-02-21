@@ -101,18 +101,11 @@ if template_file:
 
 generated_text = st.text_area("Enter the generated text", height=300)
 
-use_rule_based = os.environ.get("USE_SECTION_DETECTOR", "").strip().lower() in ("1", "true", "yes")
-use_rule_based = st.checkbox(
-    "Use rule-based formatting only (no LLM)",
-    value=use_rule_based,
-    help="Segment and label using legal heuristics (court caption, parties, headings, allegations, WHEREFORE, signature). Fast and deterministic; no API key required.",
-)
-
 if generated_text and template_file:
     if st.button("Format with LLM"):
-        with st.spinner("Calling LLM and building document…" if not use_rule_based else "Segmenting and formatting (rule-based)…"):
+        with st.spinner("Calling LLM and building document…"):
             try:
-                output_path, preview_text = process_document(generated_text, template_file, use_section_detector=use_rule_based)
+                output_path, preview_text = process_document(generated_text, template_file)
                 st.session_state["formatted_output_path"] = output_path
                 st.session_state["formatted_editor"] = preview_text
                 st.session_state["formatted_editor_html"] = plain_text_to_simple_html(preview_text)
