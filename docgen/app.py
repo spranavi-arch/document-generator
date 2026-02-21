@@ -56,6 +56,7 @@ from docgen.field_fetcher import FieldFetcher, _default_question_for_field
 from docgen.question_generator import QuestionGenerator
 from docgen.section_generator import SectionGenerator
 from docgen.assembler import Assembler
+from docgen.utils import fill_placeholders_from_context_with_llm
 
 # -------------------------
 # Sidebar
@@ -361,6 +362,8 @@ def run_pipeline():
     st.subheader("Step 5 · Polishing and formatting the document")
 
     final_draft = assembler.assemble(blueprint, draft_sections)
+    # Use LLM to fill [placeholders] from case summary / field context; fallback to key lookup if LLM fails
+    final_draft = fill_placeholders_from_context_with_llm(final_draft, field_values)
     formatted_docx_bytes = None
     formatting_error = None
 
