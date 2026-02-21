@@ -1,35 +1,44 @@
 """
 Generate one section using the section prompt, extracted sample text for this section, and field values (from API).
 Uses pre-extracted section sample text (no full-doc pass).
+Uses SectionGenerator class (OOP).
 """
 from docgen.llm_client import LLMClient
-from docgen.prompts import DOCUMENT_RULES
-
-llm = LLMClient()
+from docgen.prompts import PromptsBuilder
 
 
-def format_field_data(field_values: dict) -> str:
-    """Format key-value pairs for appending to the prompt."""
-    if not field_values:
-        return "No field data provided."
-    lines = [f"- **{k}**: {v}" for k, v in field_values.items()]
-    return "\n".join(lines)
-
-
-def generate_section(
-    section_prompt: str,
-    field_values: dict,
-    sample_text: str | None = None,
-    section_name: str | None = None,
-) -> str:
+class SectionGenerator:
     """
-    Generate section body (content only) from the section prompt and extracted sample text.
-    Formatting (style, spacing, numbering, position) is applied later in Step 5 (per-section formatting prompts).
+    Generates one section body (content only) from section prompt, extracted sample text,
+    and field values. Formatting (style, spacing, numbering) is applied later in Step 5.
     """
-    field_block = format_field_data(field_values)
-    sample_block = ""
-    if (sample_text or "").strip():
-        sample_block = f"""
+
+    def __init__(self, llm_client: LLMClient | None = None):
+        self._llm = llm_client or LLMClient()
+
+    @staticmethod
+    def format_field_data(field_values: dict) -> str:
+        """Format key-value pairs for appending to the prompt."""
+        if not field_values:
+            return "No field data provided."
+        lines = [f"- **{k}**: {v}" for k, v in field_values.items()]
+        return "\n".join(lines)
+
+    def generate_section(
+        self,
+        section_prompt: str,
+        field_values: dict,
+        sample_text: str | None = None,
+        section_name: str | None = None,
+    ) -> str:
+        """
+        Generate section body (content only) from the section prompt and extracted sample text.
+        Formatting is applied later in Step 5 (per-section formatting prompts).
+        """
+        field_block = self.format_field_data(field_values)
+        sample_block = ""
+        if (sample_text or "").strip():
+            sample_block = f"""
 ---
 SAMPLE FOR THIS SECTION (replicate format, structure, and tone — only data will change):
 ---
@@ -37,7 +46,7 @@ SAMPLE FOR THIS SECTION (replicate format, structure, and tone — only data wil
 ---
 """
 
-    case_type_instruction = """
+        case_type_instruction = """
 DOCUMENT TYPE: The sample may be a Summons & Complaint, a Motion (notice/affidavit/memorandum/order), a Notice of Claim, or another type. Use the sample for FORMAT and STRUCTURE only (layout, numbering, headings, signature/verification blocks).
 - If the section is complaint-like (allegations, causes of action): use legal language appropriate to the NEW case type (e.g. premises, motor vehicle, medical malpractice); do not copy cause-of-action wording if it does not fit.
 - If the section is motion-like (notice of motion, affidavit, memorandum, order): preserve notice/affidavit/memorandum style; substitute facts and relief from Field data.
@@ -45,9 +54,9 @@ DOCUMENT TYPE: The sample may be a Summons & Complaint, a Motion (notice/affidav
 Do not force complaint structure (e.g. numbered allegations) onto a motion or notice of claim section.
 """
 
-    section_scope = f'Output ONLY the content that belongs to this section ("{section_name or "this section"}"). Do not include the next section\'s heading or body.' if section_name else "Output ONLY the content for this section. Do not include the next section's heading or body."
+        section_scope = f'Output ONLY the content that belongs to this section ("{section_name or "this section"}"). Do not include the next section\'s heading or body.' if section_name else "Output ONLY the content for this section. Do not include the next section's heading or body."
 
-    full_prompt = f"""You must output the document text for this section exactly as it would appear in the filed document. Do NOT write summaries, bullet lists, or meta-descriptions. Output ONLY the actual legal document text for THIS section.
+        full_prompt = f"""You must output the document text for this section exactly as it would appear in the filed document. Do NOT write summaries, bullet lists, or meta-descriptions. Output ONLY the actual legal document text for THIS section.
 
 {section_prompt}
 {sample_block}
@@ -66,6 +75,22 @@ CRITICAL — follow exactly:
 4. CONSISTENCY: Use the same party names, case number, court name, dates, addresses, and attorney information throughout (same spelling and form).
 5. MAXIMUM INFORMATION: Use all information in the Field data above, including the case summary when this section needs it. Do not omit facts, dates, or figures that appear in the Field data.
 6. ONE SECTION ONLY: {section_scope} Do not merge multiple sections. No analysis, explanations, or comments.
-{DOCUMENT_RULES}
+{PromptsBuilder.DOCUMENT_RULES}
 """
-    return llm.generate(full_prompt, max_tokens=4096, temperature=0.05).strip()
+        return self._llm.generate(full_prompt, max_tokens=4096, temperature=0.05).strip()
+
+
+def format_field_data(field_values: dict) -> str:
+    return SectionGenerator.format_field_data(field_values)
+
+
+def generate_section(
+    section_prompt: str,
+    field_values: dict,
+    sample_text: str | None = None,
+    section_name: str | None = None,
+) -> str:
+    """Backward-compatible: delegates to SectionGenerator().generate_section."""
+    return SectionGenerator().generate_section(
+        section_prompt, field_values, sample_text=sample_text, section_name=section_name
+    )
