@@ -7,10 +7,19 @@ Prompts for the DOCUMENT GENERATION pipeline only:
 
 Formatting (applying DOCX styles to the final draft) has its own prompts and code
 in the formatting/ module — do not mix formatting logic or prompts here.
+
+Encapsulated in PromptsBuilder class (OOP).
 """
 
-# Generalized document rules for all document types (Motion, Summons & Complaint, Notice of Claim, Petition, Affidavit, etc.).
-DOCUMENT_RULES = """
+
+class PromptsBuilder:
+    """
+    Builds all prompt strings for the document generation pipeline.
+    Holds constants (DOCUMENT_RULES, EXTRACTION_CHUNK_SIZE, etc.) and build_* methods.
+    """
+
+    # Generalized document rules for all document types
+    DOCUMENT_RULES = """
 DOCUMENT RULES (follow for every section — applies to all document types):
 
 1. Analyze the reference: document type (e.g. Motion, Summons & Complaint, Notice of Claim, Petition, Affidavit), section headings, section order, writing style and tone, level of legal detail.
@@ -26,11 +35,28 @@ DOCUMENT RULES (follow for every section — applies to all document types):
 11. Output ONLY one clean, finalized document. Do not include analysis, explanations, or comments.
 """
 
+    # Chunk size for extraction (sections per LLM call) to stay under output token limit
+    EXTRACTION_CHUNK_SIZE = 4
 
-# this is legacy prompt
-def build_extract_section_prompt(doc: str, section_name: str) -> str:
-    """Prompt to extract one section's full, verbatim text from a legal document by section name."""
-    return f"""You are extracting a single section from a legal document. Your task is to return ONLY the full, verbatim text of the section that corresponds to: "{section_name}".
+    DRAFT_VALIDATION_REFINEMENT_INSTRUCTIONS = """
+You are validating and refining a generated legal document draft against two ORIGINAL SAMPLE documents.
+
+Your task:
+1. COMPARE the final draft to SAMPLE 1 and SAMPLE 2.
+2. Identify:
+   - MISSING: Content that appears in the samples (sections, headings, paragraphs, standard clauses, signature blocks, captions) but is absent or underdeveloped in the draft. This includes structural elements (e.g. a required heading or numbered list) and tone/depth that the samples have but the draft lacks.
+   - EXTRA or WRONG TONE: Content in the draft that (a) does not appear in the samples (extra headings, invented sections, redundant blocks), or (b) has a different tone (conversational, instructional, markdown, informal) instead of the formal legal style of the samples.
+3. REFINE the draft so that:
+   - All missing elements are added: generate any missing sections/headings/paragraphs in the same style, structure, and tone as the samples. Use the same level of detail and formatting (numbering, spacing, captions) as in the samples. Do not invent facts; use placeholders like [field_name] where data is unknown.
+   - Extra or off-tone content is removed or rewritten: delete headings/sections that do not exist in the samples; rewrite any text that sounds different from the samples so it matches their formal legal tone and structure.
+4. OUTPUT only the refined document text. No commentary, no "here is the refined draft", no bullet lists or analysis. Output the complete, filing-ready document that is as close as possible to the original samples in structure, tone, and completeness.
+"""
+
+    # Legacy prompt
+    @staticmethod
+    def build_extract_section_prompt(doc: str, section_name: str) -> str:
+        """Prompt to extract one section's full, verbatim text from a legal document by section name."""
+        return f"""You are extracting a single section from a legal document. Your task is to return ONLY the full, verbatim text of the section that corresponds to: "{section_name}".
 
 Section identification:
 - The section may appear under a heading or title that matches or closely resembles "{section_name}" (e.g. "Caption", "Summons", "Signature", "Verification", "Allegations", "Prayer for Relief").
@@ -51,20 +77,20 @@ Document:
 ---
 """
 
-
-# this is prompt used to get the document text for each section in one call which we are not using currently
-def build_split_document_into_sections_prompt(doc: str, sections: list[dict]) -> str:
-    """
-    Prompt to split a single document into exactly the given ordered sections.
-    sections: list of {"name": str, "purpose": str} in reading order.
-    Returns JSON with "sections": [ "text1", "text2", ... ] — document text only, no labels.
-    """
-    n = len(sections)
-    section_list_text = "\n".join(
-        f"  {i + 1}. Name: \"{s.get('name', '')}\" — Purpose: {s.get('purpose', '') or '(see name)'}"
-        for i, s in enumerate(sections)
-    )
-    return f"""You are splitting a legal document into exactly {n} sections. Use the section names and purposes below ONLY to identify which part of the document belongs where. Do NOT write section names or purposes into your output.
+    # Prompt used to get the document text for each section in one call (not used currently)
+    @staticmethod
+    def build_split_document_into_sections_prompt(doc: str, sections: list[dict]) -> str:
+        """
+        Prompt to split a single document into exactly the given ordered sections.
+        sections: list of {"name": str, "purpose": str} in reading order.
+        Returns JSON with "sections": [ "text1", "text2", ... ] — document text only, no labels.
+        """
+        n = len(sections)
+        section_list_text = "\n".join(
+            f"  {i + 1}. Name: \"{s.get('name', '')}\" — Purpose: {s.get('purpose', '') or '(see name)'}"
+            for i, s in enumerate(sections)
+        )
+        return f"""You are splitting a legal document into exactly {n} sections. Use the section names and purposes below ONLY to identify which part of the document belongs where. Do NOT write section names or purposes into your output.
 
 Sections (strict reading order, top to bottom):
 {section_list_text}
@@ -95,34 +121,28 @@ Document:
 ---
 """
 
-
-# we are using this currently
-# Chunk size for extraction (sections per LLM call) to stay under output token limit and avoid truncation.
-EXTRACTION_CHUNK_SIZE = 4
-
-
-def build_split_document_into_sections_chunk_prompt(
-    doc: str, sections: list[dict], start_idx: int, end_idx: int
-) -> str:
-    """
-    Chunked split: output text only for sections[start_idx:end_idx].
-    Full document section order is provided so boundaries can be determined accurately.
-    """
-    chunk_sections = sections[start_idx:end_idx]
-    n_total = len(sections)
-    k = len(chunk_sections)
-    # Full ordered list of all section names so model knows what comes before/after
-    full_order = "\n".join(
-        f"  {i + 1}. {s.get('name', '')} — {s.get('purpose', '') or '(see name)'}"
-        for i, s in enumerate(sections)
-    )
-    chunk_list_text = "\n".join(
-        f"  Section {start_idx + i + 1}. Name: \"{s.get('name', '')}\" — Purpose: {s.get('purpose', '') or '(see name)'}"
-        for i, s in enumerate(chunk_sections)
-    )
-    prev_name = sections[start_idx - 1].get("name", "previous") if start_idx > 0 else "(start of document)"
-    next_name = sections[end_idx].get("name", "next") if end_idx < n_total else "(end of document)"
-    return f"""You are extracting sections {start_idx + 1} through {start_idx + k} from a legal document. Accuracy is critical: each section must contain ONLY the text that belongs to that section according to its name and purpose.
+    @staticmethod
+    def build_split_document_into_sections_chunk_prompt(
+        doc: str, sections: list[dict], start_idx: int, end_idx: int
+    ) -> str:
+        """
+        Chunked split: output text only for sections[start_idx:end_idx].
+        Full document section order is provided so boundaries can be determined accurately.
+        """
+        chunk_sections = sections[start_idx:end_idx]
+        n_total = len(sections)
+        k = len(chunk_sections)
+        full_order = "\n".join(
+            f"  {i + 1}. {s.get('name', '')} — {s.get('purpose', '') or '(see name)'}"
+            for i, s in enumerate(sections)
+        )
+        chunk_list_text = "\n".join(
+            f"  Section {start_idx + i + 1}. Name: \"{s.get('name', '')}\" — Purpose: {s.get('purpose', '') or '(see name)'}"
+            for i, s in enumerate(chunk_sections)
+        )
+        prev_name = sections[start_idx - 1].get("name", "previous") if start_idx > 0 else "(start of document)"
+        next_name = sections[end_idx].get("name", "next") if end_idx < n_total else "(end of document)"
+        return f"""You are extracting sections {start_idx + 1} through {start_idx + k} from a legal document. Accuracy is critical: each section must contain ONLY the text that belongs to that section according to its name and purpose.
 
 FULL DOCUMENT SECTION ORDER (all {n_total} sections — use this to set exact boundaries):
 {full_order}
@@ -159,13 +179,13 @@ Document (full document — determine exact boundaries for sections {start_idx +
 ---
 """
 
-
-# both identify sections and extract the text from both docs. We are not using it currently
-def build_sectioning_and_extraction_prompt(doc1: str, doc2: str) -> str:
-    """
-    Single-step prompt: identify sections (name, purpose) AND extract the exact text for each section from both documents. No separate extraction step — avoids confusion and repetition.
-    """
-    return f"""You are an expert document analyst. Your task is to:
+    # Sectioning and extraction in one pass (not used currently)
+    @staticmethod
+    def build_sectioning_and_extraction_prompt(doc1: str, doc2: str) -> str:
+        """
+        Single-step prompt: identify sections (name, purpose) AND extract the exact text for each section from both documents.
+        """
+        return f"""You are an expert document analyst. Your task is to:
 1. IDENTIFY logical sections in BOTH documents (same section list for both). Each section has a name and purpose.
 2. EXTRACT the exact verbatim text for each section from Document 1 and from Document 2.
 Do this in ONE pass so that section boundaries are consistent and there is no overlap or repetition.
@@ -204,11 +224,10 @@ Document 2:
 ---
 """
 
-
-# prompt used to get sections
-def build_sectioning_prompt(doc1: str, doc2: str) -> str:
-    """Prompt so the LLM divides both documents into logical sections. Sections must be clearly identified so extraction can assign every line to exactly one section."""
-    return f"""You are an expert document analyst. Your task is to identify CLEARLY DEFINED sections so that every part of the document can be accurately extracted and assigned to exactly one section.
+    @staticmethod
+    def build_sectioning_prompt(doc1: str, doc2: str) -> str:
+        """Prompt so the LLM divides both documents into logical sections."""
+        return f"""You are an expert document analyst. Your task is to identify CLEARLY DEFINED sections so that every part of the document can be accurately extracted and assigned to exactly one section.
 
 Step 1 — Analyze the reference documents:
 - Document type (e.g. Motion, Summons & Complaint, Notice of Claim, Petition, Affidavit)
@@ -247,13 +266,13 @@ Document 2:
 ---
 """
 
-
-# prompt to build prompt from full docs which we are not using now
-def build_section_prompt_and_fields_prompt_from_full_docs(
-    section_name: str, purpose: str, doc1: str, doc2: str
-) -> str:
-    """Use both full sample documents for accuracy; no extraction step."""
-    return f"""You are building a template for the section "{section_name}" of a legal document. Purpose of this section: {purpose or "See documents for structure."}
+    # Build prompt from full docs (not used now)
+    @staticmethod
+    def build_section_prompt_and_fields_prompt_from_full_docs(
+        section_name: str, purpose: str, doc1: str, doc2: str
+    ) -> str:
+        """Use both full sample documents for accuracy; no extraction step."""
+        return f"""You are building a template for the section "{section_name}" of a legal document. Purpose of this section: {purpose or "See documents for structure."}
 
 Below are the TWO FULL sample documents. Identify the part in BOTH documents that corresponds to the section "{section_name}". Use the full context for accuracy.
 
@@ -289,13 +308,11 @@ Return ONLY this JSON (escape quotes as \\\" and newlines as \\n in the "prompt"
 """
 
 
-# -----------------------------------------------------------------------------
-# Section template: generation prompt + required fields (content only; formatting is Step 5)
-# -----------------------------------------------------------------------------
-
-def build_section_prompt_and_fields_prompt(section_name: str, purpose: str, sample_text: str) -> str:
-    """Prompt to generate (1) section-generation prompt and (2) required fields. Formatting (style, spacing, etc.) is handled in Step 5."""
-    return f"""You are building a template for the section "{section_name}" of a legal document. Purpose: {purpose or "See sample for structure."}
+    # Section template: generation prompt + required fields (content only; formatting is Step 5)
+    @staticmethod
+    def build_section_prompt_and_fields_prompt(section_name: str, purpose: str, sample_text: str) -> str:
+        """Prompt to generate (1) section-generation prompt and (2) required fields. Formatting is Step 5."""
+        return f"""You are building a template for the section "{section_name}" of a legal document. Purpose: {purpose or "See sample for structure."}
 
 The sample below is the EXACT content that was extracted for this section. You will produce: a generation prompt and required fields. (Formatting—styles, spacing, numbering—will be applied in a later step.)
 
@@ -326,25 +343,20 @@ Return ONLY this JSON (escape quotes as \\\" and newlines as \\n in string value
 }}
 """
 
-
-# -----------------------------------------------------------------------------
-# Step 5: Per-section formatting instruction (how to apply template formatting to each section)
-# Used when building the final formatted document section-by-section.
-# -----------------------------------------------------------------------------
-
-def build_section_formatting_instruction_prompt(
-    section_name: str,
-    purpose: str,
-    sample_section_text: str,
-    template_content_str: str,
-    style_guide_str: str = "",
-) -> str:
-    """Prompt to generate a formatting instruction for this section: text style, color, spacing, numbering, position.
-    The instruction will be used to format the generated section text so it matches the sample's appearance."""
-    style_block = f"\nTemplate paragraph styles (each line is [StyleName]: paragraph text):\n{template_content_str}\n" if template_content_str else ""
-    if style_guide_str:
-        style_block += f"\nStyle guide (font, alignment, spacing per style):\n{style_guide_str[:3000]}\n"
-    return f"""You are analyzing how ONE section of a legal document is formatted in the sample, so the same formatting can be applied to new text for that section.
+    # Step 5: Per-section formatting instruction
+    @staticmethod
+    def build_section_formatting_instruction_prompt(
+        section_name: str,
+        purpose: str,
+        sample_section_text: str,
+        template_content_str: str,
+        style_guide_str: str = "",
+    ) -> str:
+        """Prompt to generate a formatting instruction for this section."""
+        style_block = f"\nTemplate paragraph styles (each line is [StyleName]: paragraph text):\n{template_content_str}\n" if template_content_str else ""
+        if style_guide_str:
+            style_block += f"\nStyle guide (font, alignment, spacing per style):\n{style_guide_str[:3000]}\n"
+        return f"""You are analyzing how ONE section of a legal document is formatted in the sample, so the same formatting can be applied to new text for that section.
 
 Section: "{section_name}"
 Purpose: {purpose or "(see sample)"}
@@ -368,30 +380,11 @@ Be concrete and ordered (first block → style X, second block → style Y, etc.
 
 Return ONLY the formatting instruction (no JSON, no "Instruction:" label). One or more paragraphs."""
 
-
-# -----------------------------------------------------------------------------
-# Draft validation: compare final draft to samples, fill missing, remove extra
-# -----------------------------------------------------------------------------
-
-DRAFT_VALIDATION_REFINEMENT_INSTRUCTIONS = """
-You are validating and refining a generated legal document draft against two ORIGINAL SAMPLE documents.
-
-Your task:
-1. COMPARE the final draft to SAMPLE 1 and SAMPLE 2.
-2. Identify:
-   - MISSING: Content that appears in the samples (sections, headings, paragraphs, standard clauses, signature blocks, captions) but is absent or underdeveloped in the draft. This includes structural elements (e.g. a required heading or numbered list) and tone/depth that the samples have but the draft lacks.
-   - EXTRA or WRONG TONE: Content in the draft that (a) does not appear in the samples (extra headings, invented sections, redundant blocks), or (b) has a different tone (conversational, instructional, markdown, informal) instead of the formal legal style of the samples.
-3. REFINE the draft so that:
-   - All missing elements are added: generate any missing sections/headings/paragraphs in the same style, structure, and tone as the samples. Use the same level of detail and formatting (numbering, spacing, captions) as in the samples. Do not invent facts; use placeholders like [field_name] where data is unknown.
-   - Extra or off-tone content is removed or rewritten: delete headings/sections that do not exist in the samples; rewrite any text that sounds different from the samples so it matches their formal legal tone and structure.
-4. OUTPUT only the refined document text. No commentary, no "here is the refined draft", no bullet lists or analysis. Output the complete, filing-ready document that is as close as possible to the original samples in structure, tone, and completeness.
-"""
-
-
-def build_draft_validation_refinement_prompt(final_draft: str, sample1: str, sample2: str) -> str:
-    """Build prompt for comparing draft to two samples and returning refined draft."""
-    return f"""
-{DRAFT_VALIDATION_REFINEMENT_INSTRUCTIONS}
+    @staticmethod
+    def build_draft_validation_refinement_prompt(final_draft: str, sample1: str, sample2: str) -> str:
+        """Build prompt for comparing draft to two samples and returning refined draft."""
+        return f"""
+{PromptsBuilder.DRAFT_VALIDATION_REFINEMENT_INSTRUCTIONS}
 
 ---
 SAMPLE DOCUMENT 1:
@@ -411,3 +404,50 @@ CURRENT FINAL DRAFT TO VALIDATE AND REFINE:
 ---
 Output ONLY the refined document text (no explanations, no JSON, no markdown). The refined document must align with the samples in structure, headings, tone, and completeness; missing parts filled, extra or off-tone parts removed or corrected.
 """
+
+
+# Backward-compatible module-level exports
+_default_prompts = PromptsBuilder()
+DOCUMENT_RULES = PromptsBuilder.DOCUMENT_RULES
+EXTRACTION_CHUNK_SIZE = PromptsBuilder.EXTRACTION_CHUNK_SIZE
+DRAFT_VALIDATION_REFINEMENT_INSTRUCTIONS = PromptsBuilder.DRAFT_VALIDATION_REFINEMENT_INSTRUCTIONS
+
+
+def build_extract_section_prompt(doc: str, section_name: str) -> str:
+    return PromptsBuilder.build_extract_section_prompt(doc, section_name)
+
+
+def build_split_document_into_sections_prompt(doc: str, sections: list[dict]) -> str:
+    return PromptsBuilder.build_split_document_into_sections_prompt(doc, sections)
+
+
+def build_split_document_into_sections_chunk_prompt(doc: str, sections: list[dict], start_idx: int, end_idx: int) -> str:
+    return PromptsBuilder.build_split_document_into_sections_chunk_prompt(doc, sections, start_idx, end_idx)
+
+
+def build_sectioning_and_extraction_prompt(doc1: str, doc2: str) -> str:
+    return PromptsBuilder.build_sectioning_and_extraction_prompt(doc1, doc2)
+
+
+def build_sectioning_prompt(doc1: str, doc2: str) -> str:
+    return PromptsBuilder.build_sectioning_prompt(doc1, doc2)
+
+
+def build_section_prompt_and_fields_prompt_from_full_docs(section_name: str, purpose: str, doc1: str, doc2: str) -> str:
+    return PromptsBuilder.build_section_prompt_and_fields_prompt_from_full_docs(section_name, purpose, doc1, doc2)
+
+
+def build_section_prompt_and_fields_prompt(section_name: str, purpose: str, sample_text: str) -> str:
+    return PromptsBuilder.build_section_prompt_and_fields_prompt(section_name, purpose, sample_text)
+
+
+def build_section_formatting_instruction_prompt(
+    section_name: str, purpose: str, sample_section_text: str, template_content_str: str, style_guide_str: str = ""
+) -> str:
+    return PromptsBuilder.build_section_formatting_instruction_prompt(
+        section_name, purpose, sample_section_text, template_content_str, style_guide_str
+    )
+
+
+def build_draft_validation_refinement_prompt(final_draft: str, sample1: str, sample2: str) -> str:
+    return PromptsBuilder.build_draft_validation_refinement_prompt(final_draft, sample1, sample2)
