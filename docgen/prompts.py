@@ -334,7 +334,7 @@ The generated prompt MUST:
 5. ONE SECTION ONLY: The prompt must instruct the model to output ONLY the content for this section and to stop before the next section's heading or content.
 
 Task 2 — Required fields:
-List ONLY the fields that appear or are referenced in THIS section (snake_case). One field per distinct value. Extract from the sample. These will be fetched from an API.
+List ONLY the fields that appear or are referenced in THIS section (snake_case). One field per distinct value. Extract from the sample. These will be fetched from an API. field name should be self descriptive (example: plaintiff_name, plaintiffs_attorney_name, defendents_attorney_name, etc.).
 
 Return ONLY this JSON (escape quotes as \\\" and newlines as \\n in string values):
 {{

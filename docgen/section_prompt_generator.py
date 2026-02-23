@@ -22,6 +22,7 @@ class SectionPromptGenerator:
         section_name: str,
         purpose: str,
         sample_text: str,
+        category_of_document: str,
     ) -> dict:
         """
         Returns { "prompt": str, "required_fields": list[str] }.
@@ -31,7 +32,7 @@ class SectionPromptGenerator:
             section_name, purpose, sample_text or ""
         )
         response = self._llm.generate(
-            prompt,
+            [prompt, f"""overall structure of document which can help in generating prompt more accurately: {category_of_document}"""],
             json_mode=True,
             max_tokens=4096,
             temperature=0.15,
@@ -64,6 +65,7 @@ def generate_prompt_and_fields(
     section_name: str,
     purpose: str,
     sample_text: str,
+    category_of_document: str,
 ) -> dict:
     """Backward-compatible: delegates to SectionPromptGenerator().generate_prompt_and_fields."""
-    return SectionPromptGenerator().generate_prompt_and_fields(section_name, purpose, sample_text)
+    return SectionPromptGenerator().generate_prompt_and_fields(section_name, purpose, sample_text, category_of_document)

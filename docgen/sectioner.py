@@ -56,7 +56,7 @@ class Sectioner:
             return {"name": item.strip(), "purpose": ""}
         return None
 
-    def divide_into_sections(self, doc1: str, doc2: str) -> dict:
+    def divide_into_sections(self, doc1: str, doc2: str, category_of_document: str) -> dict:
         """
         Returns blueprint: { "sections": [ {"id": 1, "name": "...", "purpose": "..."}, ... ] }.
         Section text is extracted separately so nothing is truncated.
@@ -65,12 +65,17 @@ class Sectioner:
         doc2 = TextUtils.clean_text(doc2)
 
         prompt = PromptsBuilder.build_sectioning_prompt(doc1, doc2)
-        response = self._llm.generate(
-            prompt,
+        try:
+            response = self._llm.generate(
+            [prompt, f"""overall structure of document which can help in identifying sections more accurately: {category_of_document}"""],
             json_mode=True,
             max_tokens=8192,
             temperature=0.1,
         )
+        except Exception as e:
+            print(f"Error generating sections: {e}")
+            return {"sections": []}
+
         data = JsonParser.extract_json_from_llm(response)
         raw_list = self._find_sections_list(data)
         if not raw_list:

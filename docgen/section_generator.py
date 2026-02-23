@@ -47,7 +47,7 @@ SAMPLE FOR THIS SECTION (replicate format, structure, and tone — only data wil
 """
 
         case_type_instruction = """
-DOCUMENT TYPE: The sample may be a Summons & Complaint, a Motion (notice/affidavit/memorandum/order), a Notice of Claim, or another type. Use the sample for FORMAT and STRUCTURE only (layout, numbering, headings, signature/verification blocks).
+DOCUMENT TYPE: The sample may be a Summons & Complaint, a Motion (notice/affidavit/memorandum/order), a Notice of Claim, Demand letter, medical chronology, or any another type. Use the sample for FORMAT and STRUCTURE (layout, numbering, headings, signature/verification blocks).
 - If the section is complaint-like (allegations, causes of action): use legal language appropriate to the NEW case type (e.g. premises, motor vehicle, medical malpractice); do not copy cause-of-action wording if it does not fit.
 - If the section is motion-like (notice of motion, affidavit, memorandum, order): preserve notice/affidavit/memorandum style; substitute facts and relief from Field data.
 - If the section is notice-of-claim-like (claimant, public corporation, nature of claim, time/place, damages): preserve statutory and factual block structure; substitute claimant/case data from Field data.

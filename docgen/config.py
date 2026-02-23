@@ -1,5 +1,5 @@
 """
-Load env from backend folder. Used by docgen when run from project root or docgen.
+Load env from backend folder or project root. Used by docgen when run from project root or docgen.
 Encapsulates configuration in a Config class (OOP).
 """
 import os
@@ -8,11 +8,13 @@ from pathlib import Path
 
 class Config:
     """
-    Holds OpenAI/Azure configuration loaded from backend/.env.
+    Holds OpenAI/Azure configuration loaded from backend/.env or project root .env.
     Single responsibility: load and expose environment-based settings.
     """
 
-    _backend_env = Path(__file__).resolve().parent.parent / "backend" / ".env"
+    _project_root = Path(__file__).resolve().parent.parent
+    _backend_env = _project_root / "backend" / ".env"
+    _root_env = _project_root / ".env"
 
     def __init__(self):
         self._load_env()
@@ -24,12 +26,14 @@ class Config:
         self._use_azure_openai = bool(self._azure_endpoint and self._azure_api_key)
 
     def _load_env(self) -> None:
-        if self._backend_env.exists():
-            try:
-                from dotenv import load_dotenv
+        try:
+            from dotenv import load_dotenv
+            if self._backend_env.exists():
                 load_dotenv(self._backend_env)
-            except ModuleNotFoundError:
-                pass
+            if self._root_env.exists():
+                load_dotenv(self._root_env, override=True)
+        except ModuleNotFoundError:
+            pass
 
     @property
     def OPENAI_API_KEY(self) -> str:

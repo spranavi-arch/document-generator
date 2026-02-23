@@ -9,6 +9,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 OnFieldStartCallback = Callable[[str, int, int], None]
@@ -22,6 +23,7 @@ except ImportError:
 API_REQUEST_TIMEOUT = 300
 DEFAULT_DELAY_BETWEEN_CALLS_MIN = 6.0
 DEFAULT_DELAY_BETWEEN_CALLS_MAX = 15.0
+FETCH_FIELDS_BATCH_SIZE = 10
 RETRY_STATUS_CODES = (500, 501, 502, 503, 504)
 API_MAX_RETRIES = 5
 API_RETRY_BASE_DELAY = 15
@@ -451,22 +453,32 @@ Reply with exactly one word: ANSWER or NON_ANSWER. No explanation."""
         field_to_question: dict[str, str],
         delay_seconds: float | None = None,
         on_field_start: OnFieldStartCallback | None = None,
+        batch_size: int = FETCH_FIELDS_BATCH_SIZE,
     ) -> dict[str, str]:
         min_delay = DEFAULT_DELAY_BETWEEN_CALLS_MIN if delay_seconds is None else delay_seconds
         max_delay = DEFAULT_DELAY_BETWEEN_CALLS_MAX if delay_seconds is None else (delay_seconds * 1.5)
         total = len(required_fields)
         result = {}
-        for i, field in enumerate(required_fields):
-            if on_field_start:
-                on_field_start(field, i + 1, total)
+
+        def fetch_one(field: str) -> tuple[str, str]:
             question = field_to_question.get(field) or _default_question_for_field(field)
             answer = self.call_chat_api_with_question(curl_str, question)
             answer = (answer or "").strip()
             if answer and self._is_substantive_answer(answer):
-                result[field] = answer
-            else:
-                result[field] = ""
-            if max_delay > 0 and i < len(required_fields) - 1:
+                return (field, answer)
+            return (field, "")
+
+        for batch_start in range(0, total, batch_size):
+            batch = required_fields[batch_start : batch_start + batch_size]
+            for i, field in enumerate(batch):
+                if on_field_start:
+                    on_field_start(field, batch_start + i + 1, total)
+            with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+                futures = [executor.submit(fetch_one, field) for field in batch]
+                for future in as_completed(futures):
+                    field, answer = future.result()
+                    result[field] = answer
+            if max_delay > 0 and batch_start + len(batch) < total:
                 self._human_delay(min_delay, max_delay)
         return result
 

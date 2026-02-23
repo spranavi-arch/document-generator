@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -56,6 +57,7 @@ from docgen.field_fetcher import FieldFetcher, _default_question_for_field
 from docgen.question_generator import QuestionGenerator
 from docgen.section_generator import SectionGenerator
 from docgen.assembler import Assembler
+from docgen.category_identifier import CategoryIdentifier
 
 # -------------------------
 # Sidebar
@@ -114,9 +116,16 @@ def run_pipeline():
     except Exception as e:
         st.error(f"Could not read uploaded files: {e}")
         return
+    
 
     s1 = file_to_text(sample1_bytes, sample1.name or "")
     s2 = file_to_text(sample2_bytes, sample2.name or "")
+    with open("sample1.txt", "wb") as f:
+        f.write(str(s1).encode("utf-8"))
+
+    category_of_document = CategoryIdentifier().identify_category(s1, s2)
+    with open("category_of_document.txt", "wb") as f:
+        f.write(str(category_of_document).encode("utf-8"))
 
     if not (s1 or s2):
         st.error("Both documents are empty. Upload non-empty .txt or .docx files.")
@@ -138,7 +147,7 @@ def run_pipeline():
     # =====================================================
     st.subheader("Step 1 · Identifying document sections")
 
-    blueprint = sectioner.divide_into_sections(s1, s2)
+    blueprint = sectioner.divide_into_sections(s1, s2, category_of_document)
     sections = blueprint["sections"]
 
     sec_container = st.container()
@@ -178,10 +187,14 @@ def run_pipeline():
             sec_name,
             sec.get("purpose", ""),
             extracted[i] if i < len(extracted) else "",
+            category_of_document
         )
         prompts.append(p)
         step2_status.markdown(f"**{sec_name}** — prompt generated")
         time.sleep(0.2)
+    generated_prompts_file = "generated_prompts.json"
+    with open(generated_prompts_file, "wb") as f:
+        f.write(json.dumps(prompts).encode("utf-8"))
 
     step2_status.markdown("**All sections done.**")
     time.sleep(0.4)
@@ -224,6 +237,9 @@ def run_pipeline():
         if all_required:
             with st.status("Generating questions for each field...", state="running"):
                 field_to_question = question_generator.generate_questions_for_fields(all_required)
+            generated_questions_file = "generated_questions.json"
+            with open(generated_questions_file, "wb") as f:
+                f.write(json.dumps(field_to_question).encode("utf-8"))
             st.success(f"Generated {len(field_to_question)} questions.")
             with st.expander("Field → question used for API", expanded=False):
                 for f, q in field_to_question.items():
@@ -295,7 +311,7 @@ def run_pipeline():
     for i, sec in enumerate(sections, start=1):
         section_name = sec["name"]
         req_fields = prompts[i - 1].get("required_fields", [])
-        section_field_values = {f: field_values.get(f, "") for f in req_fields}
+        section_field_values = {f: field_values.get(f, "") for f in field_values} # passing all the things in case
         if ctx:
             section_field_values["case_summary_or_context"] = ctx
         if field_values.get("case_summary"):

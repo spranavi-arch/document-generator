@@ -106,25 +106,30 @@ REQUIRED RULES (follow strictly):
 FORMAT: Return ONLY valid JSON. Key = exact field name, value = the unambiguous question. Use double quotes. Escape internal quotes with backslash.
 Example:
 {{"plaintiff_name": "What is the plaintiff's full name?", "date_of_accident": "What was the date of the accident or incident?", "defendant_address": "What is the defendant's full address?", "case_index_number": "What is the case index number or docket number?", "attorney_name": "What is the name of the attorney representing the plaintiff?", "incident_location": "Where did the incident occur (full address or location)?", "amount_of_damages": "What is the total amount of damages claimed?", "date_of_filing": "What is the date of filing of this case?"}}
-
+Make sure the question is not too long or too short.
 Generate one such question for each field. No generic or vague questions."""
-        response = self._llm.generate(
-            prompt,
-            json_mode=True,
-            max_tokens=2000,
-            temperature=0.0,
-        )
-        data = JsonParser.extract_json_from_llm(response)
-        if not isinstance(data, dict):
+
+        try:
+            response = self._llm.generate(
+                prompt,
+                json_mode=True,
+                max_completion_tokens=2000,
+                temperature=0.2,
+            )
+            data = JsonParser.extract_json_from_llm(response)
+            if not isinstance(data, dict):
+                return {}
+            result = {}
+            for f in field_names:
+                q = data.get(f)
+                if isinstance(q, str) and q.strip():
+                    result[f] = self._ensure_unambiguous(f, q.strip())
+                else:
+                    result[f] = self._fallback_question(f)
+            return result
+        except Exception as e:
+            print(f"Error generating questions for fields: {e}")
             return {}
-        result = {}
-        for f in field_names:
-            q = data.get(f)
-            if isinstance(q, str) and q.strip():
-                result[f] = self._ensure_unambiguous(f, q.strip())
-            else:
-                result[f] = self._fallback_question(f)
-        return result
 
 
 def generate_questions_for_fields(field_names: list[str]) -> dict[str, str]:
