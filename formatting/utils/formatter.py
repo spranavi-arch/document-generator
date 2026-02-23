@@ -1168,6 +1168,7 @@ def _render_caption_blocks_into_cell(cell, blocks: list, style_map: dict, style_
         text = (text or "").strip()
         if not text:
             continue
+        original_text = text
         style = _resolve_style(block_type, style_map, style_formatting)
         if style not in valid_style_names:
             style = style_map.get("paragraph") or (list(valid_style_names)[0] if valid_style_names else "Normal")
@@ -1189,6 +1190,13 @@ def _render_caption_blocks_into_cell(cell, blocks: list, style_map: dict, style_
         _apply_paragraph_format(p, fmt)
         if right_align:
             p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        # Caption left cell: add solid separator line after "COUNTY OF X" so it always renders
+        if not right_align and re.match(r"^\s*COUNTY\s+OF\s+", original_text, re.I):
+            sep = cell.add_paragraph(style=style)
+            sep.add_run("\u00A0")
+            _add_bottom_border_to_paragraph(sep, pt=0.5, dashed=False)
+            pf = (style_formatting.get(style) or {}).get("paragraph_format") or {}
+            _apply_paragraph_format(sep, pf)
 
 
 def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_samples=None, section_heading_samples=None, template_structure=None, numbered_num_id=None, numbered_ilvl=0, bold_phrases_from_template=None, caption_table_layout=None):
@@ -1242,8 +1250,11 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
                 continue
             if block_kind == "section_underline":
                 p = doc.add_paragraph(style=style)
+                p.add_run("\u00A0")  # ensure paragraph has height so border is visible
                 if _paragraph_border_bottom:
                     _paragraph_border_bottom(p, pt=0.5)
+                else:
+                    _add_bottom_border_to_paragraph(p, pt=0.5, dashed=False)
                 fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
                 _apply_paragraph_format(p, fmt)
                 enforce_legal_alignment(_block_type_for_alignment(block_kind, section_type, style), p)
@@ -1366,8 +1377,11 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
             if block_type == "section_underline":
                 style = _resolve_style("paragraph", style_map, style_formatting)
                 p = doc.add_paragraph(style=style)
+                p.add_run("\u00A0")  # ensure paragraph has height so border is visible
                 if _paragraph_border_bottom:
                     _paragraph_border_bottom(p, pt=0.5)
+                else:
+                    _add_bottom_border_to_paragraph(p, pt=0.5, dashed=False)
                 fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
                 _apply_paragraph_format(p, fmt)
                 enforce_legal_alignment("paragraph", p)
@@ -1534,6 +1548,9 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
                         p.paragraph_format.keep_with_next = True
                     except Exception:
                         pass
+                # Caption: add solid separator line after "COUNTY OF X" so it always renders even if LLM omits a line block
+                if is_court_caption and re.match(r"^\s*COUNTY\s+OF\s+", txt_stripped, re.I):
+                    _add_full_width_separator(doc, style=style, space_after_pt=SPACE_AFTER_CAPTION_PT, dashed=False)
     trim_trailing_separators(doc)
 
 
