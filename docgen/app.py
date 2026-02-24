@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import tempfile
@@ -25,26 +26,168 @@ st.title("AI Document Generator")
 # -------------------------
 # Helpers (UNCHANGED)
 # -------------------------
+
+# CHANGE THIS if LibreOffice is installed elsewhere
+SOFFICE_PATH = r"C:\Program Files\LibreOffice\program\soffice.exe"
+
+
+def _html_to_text_with_numbering(soup) -> str:
+    """Extract text from BeautifulSoup, preserving list numbering (1., 2., 3.) from <ol>/<li>."""
+    from bs4 import NavigableString, Tag
+    lines = []
+
+    def visit(el):
+        if isinstance(el, NavigableString):
+            s = str(el).strip()
+            if s:
+                lines.append(s)
+            return
+        if not isinstance(el, Tag):
+            return
+        tag = el.name
+        if tag == "ol":
+            for i, li in enumerate(el.find_all("li", recursive=False), start=1):
+                part = li.get_text(separator=" ", strip=True)
+                if part:
+                    lines.append(f"{i}. {part}")
+            return
+        if tag == "ul":
+            for li in el.find_all("li", recursive=False):
+                part = li.get_text(separator=" ", strip=True)
+                if part:
+                    lines.append(f"• {part}")
+            return
+        if tag == "li":
+            part = el.get_text(separator=" ", strip=True)
+            if part:
+                lines.append(part)
+            return
+        for child in el.children:
+            visit(child)
+
+    body = soup.find("body") or soup
+    for child in body.children:
+        visit(child)
+    return "\n".join(lines) if lines else soup.get_text(separator="\n")
+
+
 def file_to_text(data: bytes, filename: str) -> str:
+
+    # Only for DOCX
     if filename and filename.lower().endswith(".docx"):
-        from docx import Document
-        doc = Document(BytesIO(data))
-        return "\n".join(p.text for p in doc.paragraphs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+
+            # Save uploaded file
+            input_path = Path(tmpdir) / "input.docx"
+
+            with open(input_path, "wb") as f:
+                f.write(data)
+
+            # Convert to HTML using LibreOffice
+            subprocess.run(
+                [
+                    SOFFICE_PATH,   # 👈 Full path here
+                    "--headless",
+                    "--convert-to",
+                    "html",
+                    "--outdir",
+                    tmpdir,
+                    str(input_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            html_path = Path(tmpdir) / "input.html"
+
+            if not html_path.exists():
+                raise RuntimeError("DOCX → HTML conversion failed")
+
+            # Read HTML
+            html = html_path.read_text(
+                encoding="utf-8",
+                errors="ignore"
+            )
+
+            # Extract clean text, preserving list numbering from <ol>/<li>
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(html, "html.parser")
+            text = _html_to_text_with_numbering(soup)
+            if not text.strip():
+                text = soup.get_text(separator="\n")
+            return text.strip()
+
+    # Fallback for non-docx
     return data.decode("utf-8", errors="ignore")
 
 
 def text_to_docx_bytes(text: str) -> bytes:
-    """Build a .docx in memory from plain text (paragraphs split on double newline)."""
-    from docx import Document
-    doc = Document()
-    for block in (text or "").split("\n\n"):
-        block = block.strip()
-        if block:
-            doc.add_paragraph(block.replace("\n", " "))
-    buf = BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf.read()
+    """
+    Convert structured text → HTML → DOCX using LibreOffice.
+    Preserves numbering and lists.
+    """
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        tmpdir = Path(tmpdir)
+
+        html_path = tmpdir / "input.html"
+        docx_path = tmpdir / "input.docx"
+
+        # Step 1: Convert text → basic HTML
+        html = build_html_from_text(text)
+
+        html_path.write_text(html, encoding="utf-8")
+
+        # Step 2: Convert HTML → DOCX
+        subprocess.run(
+            [
+                SOFFICE_PATH,
+                "--headless",
+                "--convert-to",
+                "docx",
+                "--outdir",
+                str(tmpdir),
+                str(html_path),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        if not docx_path.exists():
+            raise RuntimeError("HTML → DOCX conversion failed")
+
+        return docx_path.read_bytes()
+
+def build_html_from_text(text: str) -> str:
+    """Build minimal HTML from plain text, preserving numbered lines as <ol>/<li>."""
+    lines = (text or "").splitlines()
+    html = ["<html><body>"]
+    in_list = False
+    for line in lines:
+        line = line.strip()
+        # Detect: "1. Something"
+        if re.match(r"\d+\.\s+", line):
+            if not in_list:
+                html.append("<ol>")
+                in_list = True
+            item = re.sub(r"^\d+\.\s+", "", line)
+            html.append(f"<li>{item}</li>")
+        else:
+            if in_list:
+                html.append("</ol>")
+                in_list = False
+            if line:
+                html.append(f"<p>{line}</p>")
+    if in_list:
+        html.append("</ol>")
+    html.append("</body></html>")
+    return "\n".join(html)
+
 
 # -------------------------
 # Backend (OOP classes)
@@ -383,6 +526,14 @@ def run_pipeline():
                 _code = """
 import os, sys
 sys.path.insert(0, os.environ['FORMATTING_DIR'])
+# Load formatting/.env so OPENAI/Azure keys are available in subprocess
+try:
+    from pathlib import Path
+    from dotenv import load_dotenv
+    _fmt_dir = Path(os.environ['FORMATTING_DIR'])
+    load_dotenv(_fmt_dir / '.env')
+except Exception:
+    pass
 from backend import process_document
 draft_path = os.environ['DRAFT_PATH']
 tpl_path = os.environ['TEMPLATE_PATH']
@@ -409,10 +560,14 @@ print(out_path)
                     except OSError:
                         pass
                 if _r.returncode == 0 and _r.stdout:
-                    _out_path = _r.stdout.strip()
+                    _out_path = _r.stdout.strip().splitlines()[0].strip()
                     if os.path.isfile(_out_path):
                         with open(_out_path, "rb") as _f:
                             formatted_docx_bytes = _f.read()
+                        # If formatted file is too small, it's likely empty or broken; use plain draft instead
+                        if formatted_docx_bytes and len(formatted_docx_bytes) < 2000:
+                            formatted_docx_bytes = None
+                            formatting_error = "Formatting produced an empty or invalid document; use Download .docx for the draft."
                 else:
                     formatting_error = _r.stderr or _r.stdout or "Formatting subprocess failed"
             except Exception as _e:
@@ -429,21 +584,35 @@ print(out_path)
         label_visibility="collapsed"
     )
 
-    if formatted_docx_bytes:
+    draft_for_docx = (final_draft or "").strip() or "No content generated."
+    col_fmt, col_draft_txt, col_draft_docx = st.columns(3)
+    with col_fmt:
+        if formatted_docx_bytes:
+            st.download_button(
+                "Download formatted .docx",
+                data=formatted_docx_bytes,
+                file_name="formatted_draft.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary",
+                key="dl_fmt",
+            )
+        else:
+            st.caption("Formatted .docx not available")
+    with col_draft_txt:
         st.download_button(
-            "Download formatted .docx",
-            data=formatted_docx_bytes,
-            file_name="formatted_draft.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary"
+            "Download draft (.txt)",
+            data=(final_draft or "").encode("utf-8"),
+            file_name="draft.txt",
+            mime="text/plain",
+            key="dl_draft_txt",
         )
-    else:
+    with col_draft_docx:
         st.download_button(
-            "Download .docx",
-            data=text_to_docx_bytes(final_draft),
+            "Download draft (.docx)",
+            data=text_to_docx_bytes(draft_for_docx),
             file_name="draft.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary"
+            key="dl_draft_docx",
         )
 
     # Persist results so they stay visible after download or other re-runs
@@ -540,22 +709,34 @@ def render_saved_pipeline_results():
         key="saved_final_display",
         label_visibility="collapsed",
     )
-    if formatted_docx_bytes:
+    draft_for_docx = (final_draft or "").strip() or "No content generated."
+    col_fmt, col_draft_txt, col_draft_docx = st.columns(3)
+    with col_fmt:
+        if formatted_docx_bytes:
+            st.download_button(
+                "Download formatted .docx",
+                data=formatted_docx_bytes,
+                file_name="formatted_draft.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary",
+                key="download_formatted_saved",
+            )
+        else:
+            st.caption("Formatted .docx not available")
+    with col_draft_txt:
         st.download_button(
-            "Download formatted .docx",
-            data=formatted_docx_bytes,
-            file_name="formatted_draft.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary",
-            key="download_formatted_saved",
+            "Download draft (.txt)",
+            data=(final_draft or "").encode("utf-8"),
+            file_name="draft.txt",
+            mime="text/plain",
+            key="download_draft_txt_saved",
         )
-    else:
+    with col_draft_docx:
         st.download_button(
-            "Download .docx",
-            data=text_to_docx_bytes(final_draft),
+            "Download draft (.docx)",
+            data=text_to_docx_bytes(draft_for_docx),
             file_name="draft.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary",
             key="download_plain_saved",
         )
 

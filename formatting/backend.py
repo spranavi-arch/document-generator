@@ -125,6 +125,12 @@ def process_document(generated_text, template_file):
     except Exception:
         pass
 
+    # If LLM returned no blocks or only blocks with empty text, inject the raw draft so the DOCX is never blank
+    has_any_content = any((t or "").strip() for _, t in blocks) if blocks else False
+    if (not blocks or not has_any_content) and (generated_text or "").strip():
+        para_style = (schema.get("style_map") or {}).get("paragraph") or "Normal"
+        blocks = [(para_style, (generated_text or "").strip())]
+
     clear_document_body(doc)
     # Preserve template's section/column layout (do not force single-column so two-column claimant/attorney blocks match template)
     inject_blocks(

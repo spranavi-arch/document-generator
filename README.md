@@ -10,6 +10,7 @@ Builds a draft from two sample documents by:
 ## Setup
 
 - Uses **backend/.env** for Azure OpenAI (or OpenAI) credentials.
+- **DOCX support**: Converting uploaded .docx samples to text (with numbering preserved) uses [LibreOffice](https://www.libreoffice.org/). Install LibreOffice and set `SOFFICE_PATH` in `docgen/app.py` if it is not at the default (`C:\Program Files\LibreOffice\program\soffice.exe` on Windows).
 - From project root:
   ```bash
   pip install -r docgen/requirements.txt

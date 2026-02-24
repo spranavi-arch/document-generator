@@ -63,7 +63,7 @@ class Assembler:
             if text:
                 parts.append(text)
         draft = "\n\n".join(parts)
-        return self.renumber_numbered_paragraphs(draft)
+        return draft
 
 
 def renumber_numbered_paragraphs(text: str) -> str:

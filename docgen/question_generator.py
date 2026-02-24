@@ -47,6 +47,8 @@ class QuestionGenerator:
             return "What is the defendant's full name?"
         if "attorney" in lower and "name" in lower:
             return "What is the attorney's full name?"
+        if "verification" in lower or ("attorney" in lower and ("sign" in lower or "verif" in lower)):
+            return "What is the value for this field? (Verification is done by the plaintiff's attorney.)"
         if "plaintiff" in lower and ("address" in lower or "addr" in lower):
             return "What is the plaintiff's full address?"
         if "defendant" in lower and ("address" in lower or "addr" in lower):
@@ -91,6 +93,8 @@ class QuestionGenerator:
             return {}
         fields_str = ", ".join(f'"{f}"' for f in field_names)
         prompt = f"""You are generating questions for a legal case Q&A API. Each question must be EXPLICIT and UNAMBIGUOUS: the reader must know exactly which single piece of information to provide.
+
+NOTE: Verification is done by the plaintiff's attorney. Where a field relates to verification, attestation, or signing, frame the question with this in mind (e.g., plaintiff's attorney verifies or signs).
 
 Field names to convert to questions: {fields_str}
 

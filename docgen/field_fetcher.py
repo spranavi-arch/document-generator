@@ -295,6 +295,72 @@ Reply with exactly one word: ANSWER or NON_ANSWER. No explanation."""
     def _is_substantive_answer(self, text: str) -> bool:
         return self._is_substantive_answer_llm(text)
 
+    def _extract_value_from_answer_llm(self, answer: str, question: str = "") -> str:
+        """
+        Use LLM to extract only the value from an API response (e.g. "name of plaintiff is xyz" -> "xyz").
+        Returns empty string on failure; caller should fall back to heuristic.
+        """
+        if not answer or not answer.strip():
+            return ""
+        try:
+            from docgen.llm_client import LLMClient
+            client = LLMClient()
+            context = f"Question asked: {question}\n\n" if (question or "").strip() else ""
+            prompt = f"""You are extracting the exact value from a legal Q&A system response.
+
+{context}Response from the system:
+\"\"\"
+{answer.strip()[:2000]}
+\"\"\"
+
+Extract ONLY the concrete value that answers the question: e.g. a name, date, amount, address, or other single fact. Return nothing else — no sentence, no "The value is", no punctuation unless part of the value (e.g. dates). If the response is already just a short value (one phrase), return it as-is trimmed.
+
+Output (only the value):"""
+            value = client.generate(prompt, max_tokens=200, temperature=0.0).strip()
+            return value if value else ""
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _extract_value_from_answer_heuristic(answer: str) -> str:
+        """
+        Heuristic fallback: extract value from patterns like "X is Y", "X: Y", "X - Y".
+        """
+        if not answer or not answer.strip():
+            return ""
+        s = answer.strip()
+        if len(s) <= 80 and " is " not in s and ": " not in s and " - " not in s:
+            return s.rstrip(".")
+        if " is " in s:
+            value = s.split(" is ", 1)[-1].strip()
+            if value and len(value) < len(s):
+                s = value
+        if ": " in s:
+            value = s.rsplit(": ", 1)[-1].strip()
+            if value and len(value) < len(s):
+                s = value
+        if " - " in s:
+            value = s.rsplit(" - ", 1)[-1].strip()
+            if value and len(value) < len(s):
+                s = value
+        s = s.strip().rstrip(".")
+        if s.startswith('"') and s.endswith('"'):
+            s = s[1:-1].strip()
+        if s.startswith("'") and s.endswith("'"):
+            s = s[1:-1].strip()
+        return s.strip() if s else answer.strip()
+
+    def _extract_value_from_answer(self, answer: str, question: str = "") -> str:
+        """
+        Extract only the value from an API response. Uses LLM first for accuracy, heuristic fallback.
+        """
+        if not answer or not answer.strip():
+            return ""
+        value = self._extract_value_from_answer_llm(answer, question)
+        if value:
+            return value
+        return self._extract_value_from_answer_heuristic(answer)
+
     @staticmethod
     def _human_delay(min_sec: float = DEFAULT_DELAY_BETWEEN_CALLS_MIN, max_sec: float = DEFAULT_DELAY_BETWEEN_CALLS_MAX) -> None:
         time.sleep(random.uniform(min_sec, max_sec))
@@ -463,7 +529,7 @@ Reply with exactly one word: ANSWER or NON_ANSWER. No explanation."""
             answer = self.call_chat_api_with_question(curl_str, question)
             answer = (answer or "").strip()
             if answer and self._is_substantive_answer(answer):
-                result[field] = answer
+                result[field] = self._extract_value_from_answer(answer, question)
             else:
                 result[field] = ""
             if max_delay > 0 and i < len(required_fields) - 1:
@@ -486,7 +552,7 @@ Reply with exactly one word: ANSWER or NON_ANSWER. No explanation."""
             answer = self.call_chat_api_with_question(curl_str, question)
             answer = (answer or "").strip()
             if answer and self._is_substantive_answer(answer):
-                result[key] = answer
+                result[key] = self._extract_value_from_answer(answer, question)
             else:
                 result[key] = ""
             if max_delay > 0 and i < len(BROAD_QUESTIONS) - 1:

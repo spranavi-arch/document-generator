@@ -49,6 +49,10 @@ dist/
 *.egg-info/
 *.egg
 
+# Archives
+*.zip
+*.zip/
+
 # mypy
 .mypy_cache/
 .dmypy.json
