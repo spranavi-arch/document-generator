@@ -139,6 +139,52 @@ def _extract_paragraph_format(pf):
     return out
 
 
+def _extract_paragraph_border(para) -> dict | None:
+    """Extract paragraph border (pBdr) from OOXML for cloning. Returns dict of side -> {val, sz, space, color} or None."""
+    if para is None:
+        return None
+    try:
+        p = para._p
+        pPr = p.find(qn("w:pPr"))
+        if pPr is None:
+            return None
+        pBdr = pPr.find(qn("w:pBdr"))
+        if pBdr is None:
+            return None
+        out = {}
+        for side in ("top", "left", "bottom", "right"):
+            el = pBdr.find(qn(f"w:{side}"))
+            if el is None:
+                continue
+            attrs = {}
+            for attr in ("val", "sz", "space", "color"):
+                q = qn(f"w:{attr}")
+                v = el.get(q)
+                if v is not None:
+                    attrs[attr] = v
+            if attrs:
+                out[side] = attrs
+        return out if out else None
+    except Exception:
+        return None
+
+
+def get_paragraph_geometry(para) -> dict:
+    """Return full paragraph format dict from a paragraph (for geometry cloning). Includes indents, tab stops, alignment, spacing, border."""
+    if para is None:
+        return {}
+    pf = _extract_paragraph_format(para.paragraph_format) if getattr(para, "paragraph_format", None) else {}
+    border = _extract_paragraph_border(para)
+    if border:
+        pf["border"] = border
+    try:
+        if getattr(para, "alignment", None) is not None:
+            pf["alignment"] = _enum_name(para.alignment)
+    except Exception:
+        pass
+    return pf
+
+
 def _extract_run_format(run):
     """Extract run/font format to a JSON-serializable dict (bold, italic, underline, font name/size, color)."""
     if run is None:
@@ -671,8 +717,8 @@ def extract_tables(doc: Document) -> list[dict]:
     return tables_out
 
 
-# Phrases that indicate right-column caption content (index no., document title) in a table
-_CAPTION_RIGHT_CELL_PHRASES = ("index no", "index number", "notice of motion", "to restore", "affirmation in support", "affidavit of service")
+# Phrases that indicate right-column caption content (index no., date filed, document title, jury demand) in a table
+_CAPTION_RIGHT_CELL_PHRASES = ("index no", "index number", "date filed", "notice of motion", "to restore", "affirmation in support", "affidavit of service", "verified", "complaint", "summons", "summons and verified", "jury trial demanded")
 
 
 def detect_caption_table_layout(template_structure: list[dict], tables: list[dict]) -> dict:
@@ -782,6 +828,91 @@ def _infer_section_type(hint: str, block_kind: str) -> str:
     return "body"
 
 
+# Geometry block types for production-grade caption/layout cloning (enterprise legal doc automation)
+GEOMETRY_BLOCK_TYPES = (
+    "CaptionHeader",  # Court name, county, document title
+    "PartyBlock",     # Plaintiff, -against-, Defendant
+    "Divider",        # Horizontal line (---X or border)
+    "Body",           # Body text, allegations, preamble
+    "Signature",      # Signature line, attorney block
+    "Verification",   # Verification heading/body
+)
+
+
+def _infer_geometry_block_type(section_type: str, block_kind: str, hint: str) -> str:
+    """Map section_type + block_kind + hint to a logical geometry block type for blueprint/cloning."""
+    t = (hint or "").strip().lower()
+    if block_kind == "line":
+        return "Divider"
+    if block_kind == "section_underline":
+        return "Divider"
+    if block_kind == "signature_line":
+        return "Signature"
+    if section_type == "caption":
+        if any(x in t for x in ("supreme court", "superior court", "county of")):
+            return "CaptionHeader"
+        if any(x in t for x in ("plaintiff", "defendant", "against", "claimant", "respondent")):
+            return "PartyBlock"
+        if "index no" in t or "date filed" in t or "verified" in t or "complaint" in t or "summons" in t:
+            return "CaptionHeader"
+        return "CaptionHeader"
+    if section_type == "attorney_signature":
+        return "Signature"
+    if section_type == "notary":
+        return "Signature"
+    if section_type in ("affirmation", "affidavit"):
+        return "Verification"
+    if section_type == "to_section":
+        return "Body"
+    return "Body"
+
+
+class CaptionBlueprintExtractor:
+    """
+    Production-grade caption/layout blueprint extractor for legal document automation.
+    Extracts logical blocks (CaptionHeader, PartyBlock, Divider, Body, Signature, Verification)
+    with full paragraph geometry (indents, tab stops, alignment, spacing, borders) so the
+    generator can re-render with exact visual fidelity from the template.
+    """
+
+    def __init__(self, doc: Document):
+        self.doc = doc
+        self._structure: list[dict] | None = None
+
+    def get_template_structure(self) -> list[dict]:
+        if self._structure is None:
+            self._structure = extract_template_structure(self.doc, max_paragraphs=500)
+        return self._structure
+
+    def extract_caption_blueprint(self) -> list[dict]:
+        """
+        Return a list of block specs with geometry_block_type and full geometry (paragraph_format
+        including border) for cloning. Each item: index, geometry_block_type, style, paragraph_format,
+        run_format, block_kind, text_preview.
+        """
+        structure = self.get_template_structure()
+        return [
+            {
+                "index": i,
+                "geometry_block_type": spec.get("geometry_block_type", "Body"),
+                "style": spec.get("style", "Normal"),
+                "paragraph_format": spec.get("paragraph_format") or {},
+                "run_format": spec.get("run_format") or {},
+                "block_kind": spec.get("block_kind", "paragraph"),
+                "section_type": spec.get("section_type", "body"),
+                "text_preview": (spec.get("text") or "")[:80],
+            }
+            for i, spec in enumerate(structure)
+        ]
+
+    def get_geometry_by_type(self, geometry_block_type: str) -> list[dict]:
+        """Return all blocks of the given geometry_block_type (e.g. 'CaptionHeader', 'Divider')."""
+        return [
+            b for b in self.extract_caption_blueprint()
+            if b.get("geometry_block_type") == geometry_block_type
+        ]
+
+
 def extract_template_structure(doc: Document, max_paragraphs: int = 500) -> list[dict]:
     """
     Extract the exact structure of the template: one block spec per paragraph, in document order.
@@ -800,6 +931,9 @@ def extract_template_structure(doc: Document, max_paragraphs: int = 500) -> list
         pf = para.paragraph_format
         paragraph_format = _extract_paragraph_format(pf) if pf else {}
         run_format = _extract_run_format_from_paragraph(para)
+        border = _extract_paragraph_border(para)
+        if border is not None:
+            paragraph_format["border"] = border
         page_break_before = False
         try:
             if pf and getattr(pf, "page_break_before", None):
@@ -812,7 +946,7 @@ def extract_template_structure(doc: Document, max_paragraphs: int = 500) -> list
             template_text = text or "_________________________"
         elif _is_line_paragraph(para):
             block_kind = "line"
-            template_text = text or "----------------------------------------------------------------------X"
+            template_text = text or "--------------------------------------------------------------X"
         elif not text and _paragraph_has_bottom_border(para):
             block_kind = "section_underline"
             template_text = None
@@ -821,12 +955,14 @@ def extract_template_structure(doc: Document, max_paragraphs: int = 500) -> list
             template_text = None
         hint = (text[:80] + "…") if text and len(text) > 80 else (text or "(empty)")
         section_type = _infer_section_type(hint, block_kind)
+        geometry_block_type = _infer_geometry_block_type(section_type, block_kind, hint)
         spec = {
             "style": style_name,
             "paragraph_format": paragraph_format,
             "run_format": run_format,
             "block_kind": block_kind,
             "section_type": section_type,
+            "geometry_block_type": geometry_block_type,
             "template_text": template_text,
             "page_break_before": page_break_before,
             "hint": hint,
@@ -923,12 +1059,15 @@ def extract_document_blueprint(doc: Document) -> dict:
             "type": role,
             "style": style_name,
             "block_kind": spec.get("block_kind", "paragraph"),
+            "geometry_block_type": spec.get("geometry_block_type", "Body"),
             "formatting": {
                 "paragraph_format": spec.get("paragraph_format") or {},
                 "run_format": spec.get("run_format") or {},
             },
             "page_break_before": spec.get("page_break_before", False),
         })
+
+    caption_blueprint = CaptionBlueprintExtractor(doc).extract_caption_blueprint()
 
     # Tables: row/col count, style only (no cell text per blueprint rules)
     body = doc.element.body
@@ -967,6 +1106,7 @@ def extract_document_blueprint(doc: Document) -> dict:
         "document_layout": document_layout,
         "styles": styles,
         "sections": sections,
+        "caption_blueprint": caption_blueprint,
         "tables": tables,
         "lists": list_styles,
         "style_map": style_map,

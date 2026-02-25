@@ -6,7 +6,7 @@ import re
 import streamlit as st
 from backend import extract_and_store_styles, process_document
 from utils.style_extractor import load_document_blueprint
-from utils.html_to_docx import html_to_docx_bytes, plain_text_to_simple_html, simple_html_to_plain_text
+from utils.html_to_docx import html_to_docx_bytes, plain_text_to_simple_html
 
 # Base URL of the Flask app (CKEditor). Set CKEDITOR_FLASK_URL in .env if Flask runs elsewhere.
 CKEDITOR_FLASK_URL = os.environ.get("CKEDITOR_FLASK_URL", "http://127.0.0.1:5000")
@@ -110,7 +110,7 @@ if generated_text and template_file:
                 st.session_state["formatted_editor"] = preview_text
                 st.session_state["formatted_editor_html"] = plain_text_to_simple_html(preview_text)
                 st.session_state.pop("ckeditor_open_url", None)  # so user gets a fresh "Send to CKEditor" link
-                st.success("Document formatted successfully. Edit below with alignment and formatting, then download.")
+                st.success("Document formatted successfully. Preview below and download, or send to CKEditor to edit.")
             except Exception as e:
                 st.error(str(e))
 
@@ -141,80 +141,34 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
         st.link_button("Open in CKEditor 5", url=st.session_state["ckeditor_open_url"], help="Edit the formatted document in CKEditor (opens in a new tab).")
 
 if st.session_state.get("formatted_output_path") or st.session_state.get("formatted_editor_html"):
-    st.subheader("Editor")
-    initial_html = st.session_state.get("formatted_editor_html", "<p><br></p>")
+    st.subheader("Formatted document")
+    display_html = st.session_state.get("formatted_editor_html", "<p><br></p>")
+    # Wrap in a minimal document with readable styling and render in an iframe
+    doc_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html, body {{ background: #fff; }}
+body {{ font-family: "Times New Roman", Georgia, serif; font-size: 12pt; line-height: 1.4; max-width: 7in; margin: 1em auto; padding: 0 1em; }}
+p {{ margin: 0.4em 0; }}
+strong, b {{ font-weight: bold; }}
+em, i {{ font-style: italic; }}
+u {{ text-decoration: underline; }}
+.ql-align-center {{ text-align: center; }}
+.ql-align-right {{ text-align: right; }}
+.ql-align-justify {{ text-align: justify; }}
+</style>
+</head>
+<body>
+{display_html}
+</body>
+</html>"""
+    st.components.v1.html(doc_html, height=600, scrolling=True)
 
-    # Single editor: Quill if available, else Lexical, else plain text
-    if HAS_QUILL:
-        _col, _cap = st.columns([1, 5])
-        with _col:
-            if st.button("Add space", key="add_space_quill", help="Append a blank paragraph."):
-                current = st.session_state.get("formatted_editor_html") or initial_html
-                st.session_state["formatted_editor_html"] = add_space_paragraph(current)
-                try:
-                    st.rerun()
-                except AttributeError:
-                    st.experimental_rerun()
-        with _cap:
-            st.caption("Use the toolbar for bold, italic, underline, alignment, lists.")
-        editor_content = st_quill(
-            value=initial_html,
-            html=True,
-            key="formatted_editor",
-            toolbar=[
-                ["bold", "italic", "underline", "strike"],
-                [{"align": []}],
-                [{"list": "ordered"}, {"list": "bullet"}],
-                ["clean"],
-            ],
-        )
-        if editor_content is not None:
-            st.session_state["formatted_editor_html"] = editor_content
-        editor_html = st.session_state.get("formatted_editor_html") or initial_html
-    elif HAS_LEXICAL:
-        _col, _cap = st.columns([1, 5])
-        with _col:
-            if st.button("Add space", key="add_space_lexical", help="Append a blank paragraph."):
-                current = st.session_state.get("formatted_editor_html") or initial_html
-                st.session_state["formatted_editor_html"] = add_space_paragraph(current)
-                try:
-                    st.rerun()
-                except AttributeError:
-                    st.experimental_rerun()
-        with _cap:
-            st.caption("Use **bold**, *italic*, lists. Output is converted to DOCX.")
-        initial_value = simple_html_to_plain_text(initial_html)
-        md_content = streamlit_lexical(
-            value=initial_value,
-            placeholder="Edit document (markdown supported)",
-            height=400,
-            debounce=500,
-            key="formatted_editor_lexical",
-        )
-        if md_content is not None:
-            st.session_state["formatted_editor_html"] = _markdown_to_html(md_content)
-        editor_html = st.session_state.get("formatted_editor_html") or _markdown_to_html(initial_value)
-    else:
-        _col, _cap = st.columns([1, 5])
-        with _col:
-            if st.button("Add space", key="add_space_plain", help="Append a blank paragraph."):
-                current = st.session_state.get("formatted_editor_html") or initial_html
-                st.session_state["formatted_editor_html"] = add_space_paragraph(current)
-                try:
-                    st.rerun()
-                except AttributeError:
-                    st.experimental_rerun()
-        with _cap:
-            st.caption("Install streamlit-quill or streamlit-lexical for rich editing.")
-        editor_content = st.text_area(
-            "Edit formatted document",
-            value=simple_html_to_plain_text(initial_html),
-            height=400,
-            key="formatted_editor_plain",
-        )
-        if editor_content is not None:
-            st.session_state["formatted_editor_html"] = plain_text_to_simple_html(editor_content)
-        editor_html = st.session_state.get("formatted_editor_html") or initial_html
+    # Download: use saved DOCX from "Format with LLM" when available, else build from displayed HTML
+    initial_html = st.session_state.get("formatted_editor_html", "<p><br></p>")
+    editor_html = initial_html
 
     try:
         # Use the actual formatted DOCX from "Format with LLM" so alignment/italic/column fixes are preserved
@@ -227,7 +181,7 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
             editor_html_norm = normalize_editor_html(editor_html)
             docx_bytes = html_to_docx_bytes(editor_html_norm)
         if not docx_bytes or len(docx_bytes) == 0:
-            st.warning("Document is empty. Format with LLM first, or add content in the editor above, then download.")
+            st.warning("Document is empty. Format with LLM first, then download.")
         else:
             clicked = st.download_button(
                 "Download document (.docx)",
@@ -239,6 +193,8 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
             if clicked:
                 st.caption("Download started — check your browser’s downloads folder if the file didn’t open.")
         if output_path and os.path.isfile(output_path):
-            st.caption("Download uses the formatted document (template styles, alignment, single column). Editor changes are not included.")
+            st.caption("Download uses the formatted DOCX (template styles, alignment, single column).")
     except Exception as e:
         st.error(f"Could not build DOCX: {e}")
+        
+        
