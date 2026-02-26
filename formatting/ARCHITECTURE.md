@@ -1,30 +1,77 @@
-# Formatter architecture — template workflow only
+# Document generation architecture
 
-## Current approach: Sample → template → fill with JSON
+## Two flows
 
-For each document type with **one fixed layout** (fixed caption, divider, signature block):
+### 1. Template flow (placeholders)
 
-1. **Build template from sample:** `utils/template_builder.sample_to_template()` — extract run map, detect fields by heuristics, insert `{{PLACEHOLDER}}` run-safely, save `template.docx` and `schema.json`.
-2. **Fill template with JSON:** `utils/template_filler.fill_template()` — validate JSON against schema, replace scalars via `placeholder_docx.replace_placeholders()`, merge block placeholders (e.g. `{{CAUSE_OF_ACTION_1_PARAS__BLOCK}}`), run normalization.
-3. **No geometry cloning, no style extraction, no document rebuild.** Layout stays identical to the sample; only text is replaced or blocks expanded.
+DOCX → insert placeholders → inject JSON → export. See Phases below.
+
+### 2. Layout-Aware flow (dynamic mapping, no hardcoded placeholders)
+
+- **Sample DOCX** defines layout (geometry, styles, regions).
+- **Frontend text** defines content (raw paste or narrative).
+- **DocumentStructureExtractor** detects regions by markers: caption (-against-), allegation region (first numbered para after "AS AND FOR A FIRST CAUSE OF ACTION"), signature block (first "ESQ"), footer ("NOTICE OF ENTRY" / "NOTICE OF SETTLEMENT").
+- **FrontendTextExtractor** (LLM): raw text → JSON only (plaintiff, defendant, allegations, etc.).
+- **LayoutAwareInjector** maps content into layout: replace plaintiff/defendant by structural position, index/date by label, remove existing allegation paragraphs and insert new ones with same style/numbering. No global text replace; paragraph formatting preserved.
+
+Allegation count adapts automatically from `len(data["allegations"])`.
 
 ```
-sample.docx → template_builder → template.docx + schema.json
-       → LLM (optional) returns JSON matching schema
-       → template_filler.fill_template() → filled_output.docx
+sample.docx (layout) + frontend text → FrontendTextExtractor (LLM) → JSON
+       → LayoutAwareInjector (structural inject) → layout_filled_output.docx
 ```
 
 ---
 
-## Two-sample: deterministic diff + LLM classification
+## Flow: DOCX → freeze geometry → placeholders → inject JSON → export
 
-When **two** samples are provided (primary + secondary), the system uses **`utils/two_sample_blueprint`**:
+We **open the DOCX directly** and **freeze its geometry**. No reconstruction from pixels or images.
 
-1. **Extract units:** Both DOCX to `TextUnit` list in document order (`extract_units(doc)` via `iter_body_blocks`). Same extraction for both; stable `unit_id` (e.g. `u:0012`).
-2. **Structural diff:** Align segments by position; for each pair where text differs, compute word-level diff to get differing spans (in primary’s coordinates). `diff_documents(doc_primary, doc_secondary)`.
-3. **Classify spans:** Each differing span is sent to the LLM with context (or a heuristic fallback): “Sample 1: X, Sample 2: Y, context: … → assign one semantic field name” (e.g. `PLAINTIFF_NAME`, `DEFENDANT_NAME`, `ACCIDENT_DATE`). Controlled vocabulary + optional new `UPPER_SNAKE_CASE` names.
-4. **Classify (constrained LLM or heuristic):** One compact JSON payload with all diffs; LLM returns `mappings`: anchor to `field_name`, `field_type`, `confidence`, `notes`. If LLM is unavailable, `_heuristic_classify()` uses context. **Apply placeholders:** replace from end to start per unit; save primary as `template.docx`, build schema, merge with secondary keys for validation_info.
-5. Hardening: `filter_boilerplate_diffs()` drops long, low-similarity spans (structure drift).
+1. Open sample DOCX with python-docx.
+2. Insert placeholders (text replacement only; no style/alignment/tab/border changes).
+3. Inject JSON data (scalar + block) via TemplateFiller.
+4. Export final DOCX.
+5. **Optionally:** DOCX → HTML for preview (e.g. `utils/docx_to_html.docx_to_html()`).
+
+**Key point:** Formatting is derived from the **DOCX structure** (paragraph styles, paragraph_format, runs), not from pixels or rendered images. Deterministic and reproducible.
+
+---
+
+## Optional: Style blueprint (deterministic extraction)
+
+If you want a **style blueprint** for documentation or automation, use **`utils/style_blueprint`**:
+
+- Uses **python-docx only** to extract: paragraph styles, paragraph_format (alignment, indents, spacing), tab_stops, border definitions, run styles (bold, italic, font size).
+- Produces a **JSON blueprint** like:
+  ```json
+  {
+    "caption_block": {
+      "alignment": "CENTER",
+      "border_bottom": true,
+      "tab_stops": [ { "position_pt": 432, "alignment": "RIGHT" } ],
+      "first_line_indent_pt": 0,
+      "left_indent_pt": 0
+    },
+    "Normal": { ... }
+  }
+  ```
+- **Deterministic and reproducible.** No images involved.
+
+---
+
+## Phases (unchanged)
+
+1. **Phase 1 — Convert sample into template:** `utils/sample_to_template.convert_sample_to_template()` — text-only placeholder insertion. Saves `summons_template.docx`.
+2. **Phase 2 — Schema:** `utils/schema.py` — SUMMONS_SCHEMA_SPEC, validate_summons_data().
+3. **Phase 3 — LLM:** Case facts → JSON only; validate.
+4. **Phase 4 — Merge:** `utils/template_filler.TemplateFiller` — fill_scalar / fill_block; export final DOCX.
+
+```
+sample.docx → sample_to_template → summons_template.docx
+       → LLM(case facts) → JSON → validate_summons_data()
+       → TemplateFiller → final_output.docx
+       → (optional) docx_to_html → preview
+```
 
 ---
 
@@ -32,12 +79,21 @@ When **two** samples are provided (primary + secondary), the system uses **`util
 
 | File | Role |
 |------|------|
-| `utils/placeholder_docx.py` | Run-safe scalar replacement: `replace_placeholders()`, `generate_from_template()`. |
-| `utils/template_builder.py` | Sample → template (single-sample): run map, heuristics, run-safe placeholder insertion, schema. Entry: `sample_to_template()`. |
-| `utils/two_sample_blueprint.py` | Two-sample pipeline: `TextUnit`/`SpanDiff`, `extract_units()`, `align_units()`, `char_span_diffs()`, `collect_span_diffs()`, LLM payload + `parse_llm_mappings()`, `apply_placeholders_to_docx()`, `infer_placeholders_from_two_docx()`. |
-| `utils/structural_diff.py` | Legacy/alt: `doc_to_segments()`, `diff_documents()` (paragraph-level diff). |
-| `utils/template_filler.py` | Load schema, validate JSON, scalar + block merge, run normalization. Entry: `fill_template()`. Prompt helper: `build_template_fill_prompt()`, `parse_llm_json_response()`. |
-| `utils/style_extractor.py` | `iter_body_blocks(doc)`, template structure extraction (used by template_builder and two_sample_blueprint). |
-| `utils/formatter.py` | Minimal: `force_legal_run_format()` / `force_legal_run_format_document()` only (used by template_filler after merge). |
-| `utils/llm_formatter.py` | Stub; previous block-segmentation path removed. Use `template_filler` for schema + case facts → JSON. |
-| `backend.py` | Template workflow: `build_template_from_sample(primary, secondary=None)` uses `infer_placeholders_from_two_docx` when secondary provided; `fill_template_from_json()`, `get_document_preview_text()`. |
+| `utils/schema.py` | SUMMONS_SCHEMA, SUMMONS_SCHEMA_SPEC, validate_summons_data(). |
+| `utils/sample_to_template.py` | Phase 1: convert_sample_to_template() — text-only placeholder insertion. |
+| `utils/template_filler.py` | Phase 4: TemplateFiller (fill_scalar, fill_block), fill_template_from_data(), iter_body_blocks(). |
+| `utils/placeholder_docx.py` | Run-safe {{KEY}} replacement (replace_marker_across_runs, replace_placeholders). |
+| `utils/style_blueprint.py` | Optional: build_style_blueprint(doc) → JSON (alignment, tab_stops, borders, indents; no images). |
+| `utils/docx_to_html.py` | Optional: DOCX → HTML for preview. |
+| `utils/template_debug.py` | Debug placeholders in template. |
+| `utils/document_structure.py` | DocumentStructureExtractor, extract_structure() — caption, allegation region, signature, footer by markers. |
+| `utils/frontend_extractor.py` | FrontendTextExtractor — LLM: raw text → JSON only (plaintiff, defendant, allegations, etc.). |
+| `utils/layout_injector.py` | LayoutAwareInjector — structural replace (no global replace), preserve format; allegation count adapts. |
+| `backend.py` | Template + Layout-Aware: build_template_from_sample, fill_template_from_json, extract_from_frontend_text, inject_into_layout, get_layout_structure(), _call_llm(). |
+
+---
+
+## Removed (previous approach)
+
+- Style extraction from pixels/images, paragraph_format cloning in main flow, geometry reconstruction, Formatting Agent, LLM-based block injection.
+- Deleted: `style_extractor.py`, `formatter.py`, `llm_formatter.py`, `section_detector.py`, `style_matcher.py`, `legal_block_ontology.py`, `two_sample_blueprint.py`, `structural_diff.py`, `template_builder.py`.

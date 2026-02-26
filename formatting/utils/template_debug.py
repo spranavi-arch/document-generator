@@ -11,9 +11,11 @@ from pathlib import Path
 from docx import Document
 
 try:
-    from utils.style_extractor import iter_body_blocks
+    from utils.template_filler import iter_body_blocks
+    from utils.placeholder_docx import paragraph_full_text
 except ImportError:
-    from style_extractor import iter_body_blocks
+    from template_filler import iter_body_blocks
+    from placeholder_docx import paragraph_full_text
 
 
 def debug_placeholders(docx_path: str | Path) -> None:
@@ -30,15 +32,16 @@ def debug_placeholders(docx_path: str | Path) -> None:
 
 
 def debug_placeholders_report(docx_path: str | Path) -> str:
-    """Same as debug_placeholders but returns the report as a string (for UI)."""
+    """Same as debug_placeholders but returns the report as a string (for UI). Run-safe: uses paragraph_full_text."""
     doc = Document(docx_path)
     pat = re.compile(r"\{\{[^}]+\}\}")
     lines: list[str] = []
     for i, (p, table_id, row, col) in enumerate(iter_body_blocks(doc)):
-        if not pat.search(p.text):
+        full = paragraph_full_text(p)
+        if not pat.search(full):
             continue
         loc = f"table[{table_id}].row[{row}].cell[{col}]" if table_id is not None else f"paragraph[{i}]"
-        lines.append(f"\n[{loc}] {p.text}")
+        lines.append(f"\n[{loc}] {full}")
         for rj, run in enumerate(p.runs):
             t = (run.text or "").replace("\n", "\\n")
             if t.strip():

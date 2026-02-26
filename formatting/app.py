@@ -1,7 +1,9 @@
 """
-Streamlit app for the template workflow only.
+Streamlit app for document generation.
 
-Flow: Upload sample → Build template + schema → Fill template with JSON → Download.
+Two flows:
+- Template flow: Build template from sample (placeholders) → Fill with JSON.
+- Layout-Aware flow: Sample DOCX = layout, frontend text = content → Extract (LLM) → Inject.
 """
 
 import json
@@ -10,186 +12,224 @@ import streamlit as st
 
 from backend import (
     build_template_from_sample,
-    extract_fields_from_text,
     fill_template_from_json,
+    generate_json_from_case_facts,
     get_document_preview_text,
+    extract_from_frontend_text,
+    inject_into_layout,
+    get_layout_structure,
+    _call_llm,
+    build_auto_template_from_sample,
 )
-from utils.html_to_docx import plain_text_to_simple_html
-from utils.template_debug import debug_placeholders, debug_placeholders_report
-from utils.template_filler import build_template_fill_prompt, load_schema
+from utils.auto_template_builder import TemplateValidationError
+from utils.schema import SUMMONS_SCHEMA_SPEC, validate_summons_data
+from utils.template_debug import debug_placeholders_report
 
-
-st.title("Legal Document — Template Workflow")
+st.title("Legal Document Formatter")
 st.write(
-    "**Current approach:** Build a reusable template from a sample DOCX, then fill it with JSON. "
-    "No style extraction or document rebuild — only placeholder replacement and block merge."
+    "**Template flow:** Build template from sample (placeholders), then fill with JSON. "
+    "**Layout-Aware flow:** Sample DOCX defines layout; paste frontend text → extract → inject (no placeholders). "
+    "**Auto Template:** Upload sample → LLM detects dynamic fields → replace with «FIELD_NAME» → download template."
 )
 
-# --- Build template from sample ---
-st.subheader("1. Build template from sample")
-sample_file = st.file_uploader("Primary sample (layout) — DOCX", type=["docx"], key="sample")
-secondary_file = st.file_uploader(
-    "Secondary sample (optional — for validation & merging placeholders)",
-    type=["docx"],
-    key="secondary_sample",
-)
-
-if sample_file:
-    doc_type = st.selectbox("Document type", ["SummonsAndComplaint", "Motion"], key="doc_type")
-    if st.button("Build template"):
-        with st.spinner("Building template and schema…"):
-            try:
-                template_path, schema_path, placeholder_keys, validation_info = build_template_from_sample(
-                    sample_file, doc_type=doc_type, secondary_file=secondary_file
-                )
-                st.session_state["template_path"] = template_path
-                st.session_state["schema_path"] = schema_path
-                st.session_state["placeholder_keys"] = placeholder_keys
-                st.session_state["validation_info"] = validation_info
-                st.session_state["schema"] = load_schema(schema_path)
-                st.success(f"Template and schema saved. {len(placeholder_keys)} placeholders.")
-                if validation_info:
-                    st.info("Secondary sample used: placeholders merged. See comparison below.")
-                    st.caption("Template built with diff-based mining: differing spans between the two samples were classified as placeholders (LLM when configured, else heuristics).")
-            except Exception as e:
-                st.error(str(e))
-
-# --- Show schema when available ---
-if st.session_state.get("schema_path") and os.path.isfile(st.session_state["schema_path"]):
-    schema = st.session_state.get("schema") or load_schema(st.session_state["schema_path"])
-    with st.expander("Schema (placeholders)"):
-        st.json(schema)
-
-# --- Validate template (debug placeholders) before fill ---
-if st.session_state.get("template_path") and os.path.isfile(st.session_state["template_path"]):
-    with st.expander("Validate template (debug placeholders)", expanded=False):
-        st.caption("Paragraphs and table cells containing {{...}} plus run breakdown. Check for truncated static text, duplicated markers, or missing prefixes (e.g. COUNTY OF {{COUNTY}}).")
+# ========== Auto Template Builder ==========
+st.subheader("Auto Template Builder")
+st.caption("Upload a sample DOCX. LLM identifies dynamic values; they are replaced with «FIELD_NAME» placeholders. Body, tables, headers, and footers are included. Validation fails if any original value remains.")
+auto_sample = st.file_uploader("Sample DOCX (for auto template)", type=["docx"], key="auto_template_sample")
+if auto_sample and st.button("Build auto template", key="build_auto_template"):
+    with st.spinner("Extracting text, calling LLM, replacing…"):
         try:
-            report = debug_placeholders_report(st.session_state["template_path"])
-            st.text(report)
+            out_path = build_auto_template_from_sample(auto_sample, llm_callable=_call_llm, output_filename="auto_generated_template.docx")
+            st.session_state["auto_template_path"] = out_path
+            st.success("Template saved. Download below.")
+        except TemplateValidationError as e:
+            st.error(str(e))
+            st.write("**Values still in document:**")
+            for name, val in e.remaining:
+                st.code(f"{name}: {val!r}")
         except Exception as e:
             st.error(str(e))
 
-# --- Validation comparison when secondary sample was used ---
-if st.session_state.get("validation_info"):
-    vi = st.session_state["validation_info"]
-    with st.expander("Primary vs secondary (placeholder comparison)", expanded=True):
-        st.write("**Merged placeholders** (used in schema):")
-        st.code(", ".join(vi["merged"]) if vi["merged"] else "(none)")
-        if vi["only_in_primary"]:
-            st.warning(f"Only in primary sample: {', '.join(vi['only_in_primary'])}")
-        if vi["only_in_secondary"]:
-            st.info(f"Added from secondary sample: {', '.join(vi['only_in_secondary'])}")
-
-# --- Fill template with JSON ---
-st.subheader("2. Fill template with JSON")
-template_path = st.session_state.get("template_path")
-schema_path = st.session_state.get("schema_path")
-
-if template_path and schema_path and os.path.isfile(template_path) and os.path.isfile(schema_path):
-    # Option A: Extract fields from input text (LLM)
-    with st.expander("Extract fields from text (LLM)", expanded=False):
-        extract_input = st.text_area(
-            "Paste or type text (case narrative, notes, etc.) to extract placeholder values",
-            height=120,
-            key="extract_input",
-            placeholder="e.g. Plaintiff: John Doe. Defendant: Jane Smith. Index No. 12345. Date filed: 2024-01-15. ...",
-        )
-        if st.button("Extract fields"):
-            if not extract_input or not extract_input.strip():
-                st.warning("Enter some text first.")
-            else:
-                with st.spinner("Calling LLM to extract fields…"):
-                    try:
-                        data = extract_fields_from_text(extract_input.strip(), schema_path)
-                        st.session_state["json_input"] = json.dumps(data, indent=2)
-                        st.success("Fields extracted. Edit JSON below if needed, then click Fill template.")
-                    except Exception as e:
-                        st.error(str(e))
-
-    json_input = st.text_area(
-        "Paste JSON that matches the schema (or case facts for LLM-assisted fill)",
-        height=200,
-        placeholder='{"INDEX_NO": "...", "DATE_FILED": "...", "PLAINTIFF_NAME": "...", ...}',
-        key="json_input",
-    )
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Fill template"):
-            if not json_input or not json_input.strip():
-                st.warning("Enter JSON first.")
-            else:
-                with st.spinner("Filling template…"):
-                    try:
-                        schema = load_schema(schema_path)
-                        # If it looks like raw text (case facts), try LLM prompt helper message
-                        text = json_input.strip()
-                        if text.startswith("{") and ("}" in text or "\n" in text):
-                            data = json.loads(text)
-                        else:
-                            # User might have pasted case facts; try to parse as JSON anyway, else show hint
-                            try:
-                                data = json.loads(text)
-                            except json.JSONDecodeError:
-                                st.info(
-                                    "Input is not valid JSON. Paste a JSON object that matches the schema, "
-                                    "or use an LLM with the prompt from the expander below to generate JSON from case facts."
-                                )
-                                data = None
-                        if data is not None:
-                            output_path = fill_template_from_json(
-                                template_path, schema_path, data
-                            )
-                            st.session_state["filled_output_path"] = output_path
-                            st.session_state["formatted_editor_html"] = plain_text_to_simple_html(
-                                get_document_preview_text(output_path)
-                            )
-                            st.success("Document filled. Download below.")
-                    except Exception as e:
-                        st.error(str(e))
-    with col2:
-        if schema_path and os.path.isfile(schema_path):
-            with st.expander("Prompt for LLM (schema + case facts → JSON)"):
-                facts = st.text_area("Case facts", height=80, key="case_facts")
-                if facts:
-                    prompt = build_template_fill_prompt(
-                        load_schema(schema_path), facts
-                    )
-                    st.text_area("Copy this prompt", prompt, height=200, key="prompt_copy")
-else:
-    st.caption("Build a template from a sample (step 1) first.")
-
-# --- Preview and download filled document ---
-if st.session_state.get("filled_output_path") and os.path.isfile(
-    st.session_state["filled_output_path"]
-):
-    st.subheader("Filled document")
-    output_path = st.session_state["filled_output_path"]
-    display_html = st.session_state.get(
-        "formatted_editor_html",
-        plain_text_to_simple_html(get_document_preview_text(output_path)),
-    )
-    doc_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-html, body {{ background: #fff; }}
-body {{ font-family: "Times New Roman", Georgia, serif; font-size: 12pt; line-height: 1.4; max-width: 7in; margin: 1em auto; padding: 0 1em; }}
-p {{ margin: 0.4em 0; }}
-</style>
-</head>
-<body>
-{display_html}
-</body>
-</html>"""
-    st.components.v1.html(doc_html, height=500, scrolling=True)
-    with open(output_path, "rb") as f:
+if st.session_state.get("auto_template_path") and os.path.isfile(st.session_state["auto_template_path"]):
+    with open(st.session_state["auto_template_path"], "rb") as f:
         docx_bytes = f.read()
     st.download_button(
-        "Download filled document (.docx)",
+        "Download auto_generated_template.docx",
         data=docx_bytes,
-        file_name="filled_output.docx",
+        file_name="auto_generated_template.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        key="download_docx",
+        key="download_auto_template",
     )
+
+# ========== Layout-Aware flow ==========
+st.subheader("Layout-Aware flow (dynamic mapping)")
+st.caption("Uploaded sample defines layout. Frontend text defines content. Allegation count adapts automatically.")
+layout_sample = st.file_uploader("Sample DOCX (defines layout)", type=["docx"], key="layout_sample")
+if layout_sample:
+    # Persist to output dir so we can pass path to injector
+    project_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(project_dir, "output")
+    os.makedirs(output_dir, exist_ok=True)
+    layout_path = os.path.join(output_dir, "sample_layout.docx")
+    with open(layout_path, "wb") as f:
+        f.write(layout_sample.getvalue())
+    st.session_state["layout_sample_path"] = layout_path
+    with st.expander("Inspect layout structure", expanded=False):
+        try:
+            struct = get_layout_structure(layout_path)
+            st.json(struct)
+        except Exception as e:
+            st.error(str(e))
+
+frontend_text = st.text_area(
+    "Frontend text (raw content to extract from)",
+    height=140,
+    key="frontend_text",
+    placeholder="Paste case narrative, caption text, allegations, signature block...",
+)
+col_a, col_b = st.columns(2)
+with col_a:
+    if st.button("Extract with LLM"):
+        if not frontend_text or not frontend_text.strip():
+            st.warning("Enter frontend text first.")
+        else:
+            with st.spinner("Extracting…"):
+                try:
+                    data = extract_from_frontend_text(frontend_text.strip(), llm_callable=_call_llm)
+                    st.session_state["layout_extracted_json"] = json.dumps(data, indent=2)
+                    st.success("Extracted. Click Inject into layout.")
+                except Exception as e:
+                    st.error(str(e))
+with col_b:
+    if st.session_state.get("layout_sample_path") and os.path.isfile(st.session_state["layout_sample_path"]):
+        layout_json = st.session_state.get("layout_json_edit") or st.session_state.get("layout_extracted_json", "")
+        if st.button("Inject into layout"):
+            if not layout_json or not layout_json.strip():
+                st.warning("Extract with LLM first, or paste JSON above.")
+            else:
+                try:
+                    data = json.loads(layout_json.strip())
+                    out_path = inject_into_layout(
+                        st.session_state["layout_sample_path"],
+                        data,
+                        output_filename="layout_filled_output.docx",
+                    )
+                    st.session_state["layout_output_path"] = out_path
+                    st.success("Done. Download below.")
+                except json.JSONDecodeError as e:
+                    st.error(f"Invalid JSON: {e}")
+                except Exception as e:
+                    st.error(str(e))
+
+if st.session_state.get("layout_extracted_json"):
+    st.text_area("Extracted JSON (edit if needed)", st.session_state["layout_extracted_json"], height=180, key="layout_json_edit")
+    if st.button("Apply edited JSON to session"):
+        st.session_state["layout_extracted_json"] = st.session_state.get("layout_json_edit", "")
+
+if st.session_state.get("layout_output_path") and os.path.isfile(st.session_state["layout_output_path"]):
+    st.download_button(
+        "Download layout_filled_output.docx",
+        data=open(st.session_state["layout_output_path"], "rb").read(),
+        file_name="layout_filled_output.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key="download_layout_docx",
+    )
+
+# st.divider()
+
+# # ========== Template flow ==========
+# st.subheader("1. Build template from sample")
+# sample_file = st.file_uploader("Sample Summons & Complaint (DOCX)", type=["docx"], key="sample")
+
+# if sample_file and st.button("Build template"):
+#     with st.spinner("Converting sample to template…"):
+#         try:
+#             template_path, schema_path = build_template_from_sample(sample_file)
+#             st.session_state["template_path"] = template_path
+#             st.session_state["schema_path"] = schema_path
+#             st.success("Template saved. Placeholders inserted (Phase 1).")
+#         except Exception as e:
+#             st.error(str(e))
+
+# # --- Show schema ---
+# if st.session_state.get("schema_path") and os.path.isfile(st.session_state.get("schema_path", "")):
+#     with st.expander("Schema (placeholders)"):
+#         st.json({k: v for k, v in SUMMONS_SCHEMA_SPEC.items()})
+
+# # --- Validate template (debug placeholders) ---
+# if st.session_state.get("template_path") and os.path.isfile(st.session_state.get("template_path", "")):
+#     with st.expander("Validate template (debug placeholders)", expanded=False):
+#         try:
+#             report = debug_placeholders_report(st.session_state["template_path"])
+#             st.text(report)
+#         except Exception as e:
+#             st.error(str(e))
+
+# # --- Phase 3 + 4: Fill template with JSON ---
+# st.subheader("2. Fill template with JSON")
+# template_path = st.session_state.get("template_path")
+# schema_path = st.session_state.get("schema_path")
+
+# if template_path and schema_path and os.path.isfile(template_path):
+#     # Option A: Generate JSON from case facts (Phase 3 — LLM)
+#     with st.expander("Generate JSON from case facts (LLM)", expanded=False):
+#         case_facts = st.text_area(
+#             "Case facts",
+#             height=120,
+#             key="case_facts",
+#             placeholder="e.g. Plaintiff: John Doe. Defendant: Jane Smith. Index No. 12345. Date filed: 2024-01-15. ...",
+#         )
+#         if st.button("Generate JSON"):
+#             if not case_facts or not case_facts.strip():
+#                 st.warning("Enter case facts first.")
+#             else:
+#                 with st.spinner("Calling LLM…"):
+#                     try:
+#                         data = generate_json_from_case_facts(case_facts.strip(), llm_callable=_call_llm)
+#                         st.session_state["json_input"] = json.dumps(data, indent=2)
+#                         st.success("JSON generated. Edit below if needed, then click Fill template.")
+#                     except Exception as e:
+#                         st.error(str(e))
+
+#     json_input = st.text_area(
+#         "JSON (paste or from LLM above)",
+#         height=200,
+#         placeholder='{"INDEX_NO": "...", "DATE_FILED": "...", "PLAINTIFF_NAME": "...", ...}',
+#         key="json_input",
+#     )
+#     if st.button("Fill template"):
+#         if not json_input or not json_input.strip():
+#             st.warning("Enter JSON first.")
+#         else:
+#             try:
+#                 data = json.loads(json_input.strip())
+#                 validate_summons_data(data)
+#                 output_path = fill_template_from_json(template_path, schema_path, data)
+#                 st.session_state["filled_output_path"] = output_path
+#                 st.session_state["formatted_editor_html"] = get_document_preview_text(output_path)
+#                 st.success("Document filled. Download below.")
+#             except json.JSONDecodeError as e:
+#                 st.error(f"Invalid JSON: {e}")
+#             except ValueError as e:
+#                 st.error(str(e))
+# else:
+#     st.caption("Build a template from a sample (step 1) first.")
+
+# # --- Preview and download ---
+# if st.session_state.get("filled_output_path") and os.path.isfile(st.session_state["filled_output_path"]):
+#     st.subheader("Filled document")
+#     output_path = st.session_state["filled_output_path"]
+#     display_html = st.session_state.get(
+#         "formatted_editor_html",
+#         get_document_preview_text(output_path),
+#     )
+#     st.text(display_html)
+#     with open(output_path, "rb") as f:
+#         docx_bytes = f.read()
+#     st.download_button(
+#         "Download final_output.docx",
+#         data=docx_bytes,
+#         file_name="final_output.docx",
+#         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+#         key="download_docx",
+#     )
