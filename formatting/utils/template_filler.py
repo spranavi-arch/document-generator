@@ -76,11 +76,23 @@ def validate_json_against_schema(data: dict[str, Any], schema: dict[str, Any]) -
         if required and val in (None, "", []):
             errors.append(f"Required key {key} is empty")
 
-    # No extra keys: allow only schema keys or parent keys of dotted schema keys (e.g. SIGNATURE_BLOCK)
+    # No extra keys: allow only schema keys or parent keys of dotted schema keys (e.g. SIGNATURE_BLOCK),
+    # plus common legal keys that extraction may add even when the schema omits them (e.g. template from different sample).
     allowed = set(placeholders)
     for pk in placeholders:
         if "." in pk:
             allowed.add(pk.split(".")[0])
+    allowed |= {
+        "PLAINTIFF_NAME",
+        "DEFENDANT_NAME",
+        "INDEX_NO",
+        "DATE_FILED",
+        "VENUE_BASIS",
+        "WHEREFORE",
+        "CAUSE_OF_ACTION_1_TITLE",
+        "CAUSE_OF_ACTION_1_PARAS__BLOCK",
+        "SIGNATURE_BLOCK",
+    }
     for key in data:
         if key not in allowed:
             errors.append(f"Unexpected key: {key}")
@@ -222,6 +234,69 @@ def fill_template(
         force_legal_run_format(para)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     doc.save(output_path)
+
+
+def build_extract_fields_prompt(schema: dict[str, Any], input_text: str) -> str:
+    """
+    Build prompt for LLM: extract schema fields from the given text and return JSON only.
+    Includes explicit legal-document guidance so plaintiff/defendant names and other fields are found.
+    """
+    placeholders = schema.get("placeholders") or {}
+    doc_type = schema.get("doc_type", "SummonsAndComplaint")
+    lines = [
+        f"You are extracting structured data from a {doc_type} legal document. The text may be a summons, complaint, or similar filing.",
+        "Extract the following fields from the text below. Return a single JSON object with only these keys. Return JSON only — no markdown, no explanation, no code fence.",
+        "",
+        "Fields to extract (key: type). Where to find them in the document:",
+    ]
+    # Add brief hints for common keys so the model knows what to look for
+    hints = {
+        "PLAINTIFF_NAME": "Plaintiff's full name as in the caption, usually ALL CAPS before 'Plaintiff,' or 'Plaintiff.' (e.g. KELLEY SKAARVA). Use the exact spelling from the text.",
+        "DEFENDANT_NAME": "Defendant's full name as in the caption, usually ALL CAPS before 'Defendant.' or 'Defendant' (e.g. HENRY SARBIESKI). Use the exact spelling from the text.",
+        "INDEX_NO": "The index/docket number after 'Index No.:' or 'INDEX NO.:' (e.g. NNHCV216111723S).",
+        "DATE_FILED": "The date after 'Date Filed:' or 'DATE FILED:'. Use YYYY-MM-DD if a full date is given, or keep placeholder like [Date] if that appears.",
+        "VENUE_BASIS": "The sentence or phrase stating basis of venue (e.g. 'Plaintiff's Residence: 1070 Amity Road, Lot 52, in Bethany, New Haven County, Connecticut.').",
+        "WHEREFORE": "The WHEREFORE paragraph if present (prayer for relief).",
+        "CAUSE_OF_ACTION_1_TITLE": "The cause of action heading in ALL CAPS (e.g. NEGLIGENCE), usually after 'AS AND FOR A FIRST CAUSE OF ACTION:'.",
+        "CAUSE_OF_ACTION_1_PARAS__BLOCK": "Array of the numbered allegation paragraphs (1., 2., 3., ...) under that cause of action. Each item is one full paragraph text. Preserve numbering in the text if present.",
+        "SIGNATURE_BLOCK.FIRM": "Law firm name (e.g. COHAN LAW FIRM PLLC, MARKEY BARRETT, PC).",
+        "SIGNATURE_BLOCK.ATTORNEY": "Attorney name with title (e.g. MICHAEL COHAN, ESQ., PETER G. BARRETT, ESQ.).",
+        "SIGNATURE_BLOCK.PHONE": "Phone number in (xxx) xxx-xxxx form.",
+        "SIGNATURE_BLOCK.ADDRESS_LINE_1": "First line of attorney/firm address (street, suite, floor).",
+        "SIGNATURE_BLOCK.ADDRESS_LINE_2": "Second line (city, state zip).",
+    }
+    for key, spec in placeholders.items():
+        if not isinstance(spec, dict):
+            continue
+        ptype = spec.get("type", "string")
+        required = "required" if spec.get("required", False) else "optional"
+        hint = hints.get(key, "")
+        if hint:
+            lines.append(f"  - {key}: {ptype} ({required}) — {hint}")
+        else:
+            lines.append(f"  - {key}: {ptype} ({required})")
+    lines.extend([
+        "",
+        "Rules:",
+        "- No extra keys. Use empty string \"\" or [] for missing optional fields.",
+        "- CRITICAL: You MUST extract PLAINTIFF_NAME and DEFENDANT_NAME. Look for ALL CAPS names in the caption: the name on the line before 'Plaintiff,' or 'Plaintiff.' is PLAINTIFF_NAME; the name before 'Defendant.' or 'Defendant' is DEFENDANT_NAME. Example: 'KELLEY SKAARVA,' and 'HENRY SARBIESKI,'.",
+        "- For PLAINTIFF_NAME and DEFENDANT_NAME, copy the name exactly as it appears in the caption (including trailing comma if present, e.g. 'KELLEY SKAARVA,').",
+        "- For string_list (e.g. CAUSE_OF_ACTION_1_PARAS__BLOCK), use an array of strings; each string is one paragraph (include the number and text, e.g. '1. At the time of the accident...').",
+        "- For nested keys (SIGNATURE_BLOCK.*), use a nested object: SIGNATURE_BLOCK: { FIRM: \"...\", ATTORNEY: \"...\", PHONE: \"...\", ADDRESS_LINE_1: \"...\", ADDRESS_LINE_2: \"...\" }.",
+        "- Dates: use YYYY-MM-DD when a full date is given; otherwise keep placeholders like [Date] or [February 8, 2024] if that appears in the text.",
+        "- Search the entire text: captions may appear more than once (e.g. at top of summons and again on complaint). Use the first clear occurrence for index/date/parties; use the attorney block that matches the main signature (e.g. COHAN LAW FIRM PLLC / MICHAEL COHAN for the summons cover).",
+        "",
+        "Example shape (replace with actual values from the text):",
+        '  {"INDEX_NO": "NNHCV216111723S", "DATE_FILED": "[Date]", "PLAINTIFF_NAME": "KELLEY SKAARVA,", "DEFENDANT_NAME": "HENRY SARBIESKI,", "VENUE_BASIS": "Plaintiff\'s Residence: 1070 Amity Road...", "SIGNATURE_BLOCK": {"FIRM": "COHAN LAW FIRM PLLC", "ATTORNEY": "MICHAEL COHAN, ESQ.", "PHONE": "(855) 855-0321", "ADDRESS_LINE_1": "401 Park Avenue South, 10th Floor", "ADDRESS_LINE_2": "New York, New York 10016"}, ...}',
+        "",
+        "Input text:",
+        "---",
+        input_text.strip(),
+        "---",
+        "",
+        "Return only the JSON object, no other text.",
+    ])
+    return "\n".join(lines)
 
 
 def build_template_fill_prompt(schema: dict[str, Any], case_facts: str) -> str:

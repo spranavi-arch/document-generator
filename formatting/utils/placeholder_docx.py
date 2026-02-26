@@ -15,10 +15,52 @@ from pathlib import Path
 from docx import Document
 
 
+def replace_marker_across_runs(paragraph, marker: str, value: str) -> bool:
+    """
+    Replace a placeholder marker that may be split across runs (e.g. Run1 '{{LIC' Run2 'ENSE_PLATE}}').
+    Concatenates run texts, finds marker, then rewrites the first involved run with the
+    replaced text and clears the others. Returns True if replacement was made.
+    """
+    full = "".join(r.text or "" for r in paragraph.runs)
+    idx = full.find(marker)
+    if idx < 0:
+        return False
+    end = idx + len(marker)
+
+    pos = 0
+    run_spans = []
+    for ri, r in enumerate(paragraph.runs):
+        run_len = len(r.text or "")
+        run_spans.append((ri, pos, pos + run_len))
+        pos += run_len
+
+    involved = [s for s in run_spans if not (s[2] <= idx or s[1] >= end)]
+    if not involved:
+        return False
+
+    first_i = involved[0][0]
+    last_i = involved[-1][0]
+
+    new_full = full[:idx] + value + full[end:]
+
+    paragraph.runs[first_i].text = new_full
+    for ri in range(first_i + 1, len(paragraph.runs)):
+        if ri <= last_i:
+            paragraph.runs[ri].text = ""
+    return True
+
+
 def _replace_placeholder_in_paragraph(p, replacements: dict[str, str]) -> None:
     """Replace placeholders in one paragraph. Run-safe: rebuild paragraph so placeholders
     that span multiple runs (e.g. Run1 '{{PLA' Run2 'INTIFF' Run3 '}}') are fully replaced.
-    Prevents style leakage by adding a single clean run (no bold/italic/underline)."""
+    Prevents style leakage by adding a single clean run (no bold/italic/underline).
+    Only replaces placeholder markers (e.g. {{PLAINTIFF_NAME}}), never raw document text.
+    Uses replace_marker_across_runs for any marker not found in paragraph text (split across runs)."""
+    full_text = p.text
+    # First pass: run-based replace for markers that may be split across runs
+    for key, value in replacements.items():
+        if key not in full_text:
+            replace_marker_across_runs(p, key, value)
     full_text = p.text
     replaced = False
     for key, value in replacements.items():
@@ -27,10 +69,8 @@ def _replace_placeholder_in_paragraph(p, replacements: dict[str, str]) -> None:
             replaced = True
     if not replaced:
         return
-    # Remove all runs (reverse order so indices stay valid)
     for r in p.runs[::-1]:
         r._element.getparent().remove(r._element)
-    # Add single clean run so template italic/alignment don't leak
     new_run = p.add_run(full_text)
     new_run.bold = False
     new_run.italic = False

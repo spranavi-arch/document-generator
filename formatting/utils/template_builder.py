@@ -444,6 +444,22 @@ def _apply_block_candidates(doc: Document, para_map: list[dict], block_candidate
 # Schema generation (Phase 2)
 # ---------------------------------------------------------------------------
 
+def detect_placeholder_keys(doc: Document, doc_type: str = "SummonsAndComplaint") -> list[str]:
+    """
+    Run heuristic detection on a document without modifying it. Returns sorted list of
+    placeholder keys that would be used. Use for a secondary sample to merge keys.
+    """
+    para_map = build_paragraph_map(doc)
+    scalar_candidates = _detect_scalar_candidates(para_map)
+    block_candidates = _detect_block_candidates(para_map)
+    keys = set()
+    for c in scalar_candidates:
+        keys.add(c["placeholder_key"])
+    for c in block_candidates:
+        keys.add(c["placeholder_key"])
+    return sorted(keys)
+
+
 # Document-type-specific placeholder sets: which keys are typically required for that doc type.
 DOC_TYPE_PLACEHOLDERS: dict[str, set[str]] = {
     "SummonsAndComplaint": {
@@ -485,6 +501,34 @@ def save_schema(schema: dict, schema_path: str | Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _spans_overlap(a: dict, b: dict) -> bool:
+    """True if two candidates overlap (same para_id, character ranges overlap)."""
+    if a.get("para_id") != b.get("para_id"):
+        return False
+    s1, e1 = a.get("start_char", 0), a.get("end_char", 0)
+    s2, e2 = b.get("start_char", 0), b.get("end_char", 0)
+    return s1 < e2 and s2 < e1
+
+
+def merge_diff_with_heuristic_candidates(
+    para_map: list[dict],
+    scalar_candidates: list[dict],
+    block_candidates: list[dict],
+    diff_candidates: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """
+    Prefer diff-based candidates over heuristics for overlapping spans.
+    Remove any scalar candidate that overlaps a diff candidate; then add all diff candidates.
+    Block candidates are unchanged.
+    """
+    scalar_filtered = [
+        c for c in scalar_candidates
+        if not any(_spans_overlap(c, d) for d in diff_candidates)
+    ]
+    scalar_merged = scalar_filtered + list(diff_candidates)
+    return scalar_merged, block_candidates
+
+
 def sample_to_template(
     sample_path: str | Path,
     template_path: str | Path,
@@ -509,6 +553,66 @@ def sample_to_template(
     para_map = build_paragraph_map(doc)
     scalar_candidates = _detect_scalar_candidates(para_map)
     block_candidates = _detect_block_candidates(para_map)
+    if callable(llm_classifier):
+        ambiguous = get_ambiguous_regions(para_map, scalar_candidates, block_candidates)
+        for region in ambiguous:
+            prompt = build_classification_prompt(region)
+            try:
+                response = llm_classifier(prompt)
+                parsed = parse_classification_response(response)
+                if parsed and parsed.get("confidence", 0) >= classification_confidence_threshold:
+                    key = (parsed.get("placeholder") or "").strip()
+                    if key:
+                        scalar_candidates.append({
+                            "placeholder_key": key,
+                            "para_id": region["para_id"],
+                            "start_char": region["start_char"],
+                            "end_char": region["end_char"],
+                        })
+            except Exception:
+                pass
+    _apply_scalar_candidates(doc, para_map, scalar_candidates)
+    _apply_block_candidates(doc, para_map, block_candidates)
+    template_path.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(template_path)
+    all_keys = list({c["placeholder_key"] for c in scalar_candidates + block_candidates})
+    schema = build_schema_from_placeholders(all_keys, doc_type=doc_type)
+    save_schema(schema, schema_path)
+    return all_keys, schema
+
+
+def sample_to_template_with_diff(
+    primary_path: str | Path,
+    template_path: str | Path,
+    schema_path: str | Path,
+    doc_type: str = "SummonsAndComplaint",
+    diff_candidates: list[dict] | None = None,
+    *,
+    llm_classifier: Any = None,
+    classification_confidence_threshold: float = 0.8,
+) -> tuple[list[str], dict]:
+    """
+    Build template from primary sample, using diff-based candidates (from comparing
+    primary vs secondary) when provided. Structural diff reveals variable spans;
+    LLM classifies them. Heuristic detection still runs on primary; overlapping
+    spans are replaced by diff-based placeholders.
+
+    diff_candidates: list of {para_id, start_char, end_char, placeholder_key} from
+    get_diff_based_candidates(primary_doc, secondary_doc, llm_callable).
+
+    Returns (list of placeholder keys, schema dict).
+    """
+    primary_path = Path(primary_path)
+    template_path = Path(template_path)
+    schema_path = Path(schema_path)
+    doc = Document(primary_path)
+    para_map = build_paragraph_map(doc)
+    scalar_candidates = _detect_scalar_candidates(para_map)
+    block_candidates = _detect_block_candidates(para_map)
+    if diff_candidates:
+        scalar_candidates, block_candidates = merge_diff_with_heuristic_candidates(
+            para_map, scalar_candidates, block_candidates, diff_candidates
+        )
     if callable(llm_classifier):
         ambiguous = get_ambiguous_regions(para_map, scalar_candidates, block_candidates)
         for region in ambiguous:

@@ -1,72 +1,30 @@
-# Formatter architecture (production-grade)
+# Formatter architecture — template workflow only
 
-## Recommended: Fixed template + placeholders
+## Current approach: Sample → template → fill with JSON
 
 For each document type with **one fixed layout** (fixed caption, divider, signature block):
 
-1. **Create the template** in Word with placeholders, e.g.  
-   `{{PLAINTIFF}}`, `{{DEFENDANT}}`, `{{INDEX_NO}}`, `{{DATE}}`, `{{ATTORNEY_NAME}}`
-2. **Replace placeholders programmatically** — no geometry cloning, no style extraction, no paragraph rebuilding.
-3. **Save.**
-
-Layout, dividers, tab stops, indents, and court formatting stay **exact**. You only swap text.
+1. **Build template from sample:** `utils/template_builder.sample_to_template()` — extract run map, detect fields by heuristics, insert `{{PLACEHOLDER}}` run-safely, save `template.docx` and `schema.json`.
+2. **Fill template with JSON:** `utils/template_filler.fill_template()` — validate JSON against schema, replace scalars via `placeholder_docx.replace_placeholders()`, merge block placeholders (e.g. `{{CAUSE_OF_ACTION_1_PARAS__BLOCK}}`), run normalization.
+3. **No geometry cloning, no style extraction, no document rebuild.** Layout stays identical to the sample; only text is replaced or blocks expanded.
 
 ```
-Analyzer → content JSON (plaintiff, defendant, index_no, …)
-    ↓
-Formatter → load fixed template → replace_placeholders() → (optional: insert dynamic sections) → save
+sample.docx → template_builder → template.docx + schema.json
+       → LLM (optional) returns JSON matching schema
+       → template_filler.fill_template() → filled_output.docx
 ```
-
-**API:** `utils/placeholder_docx.py`
-
-- `replace_placeholders(doc, replacements)` — in-place replacement in paragraphs and table cells.
-- `generate_from_template(template_path, replacements, output_path)` — load, replace, optionally save.
-
-Use this when: you control the template, structure is known, and legal formatting must be pixel-stable. This is how enterprise legal systems work: preserve template structure, inject data.
 
 ---
 
-## Alternative: Arbitrary template (extraction + LLM)
+## Two-sample: deterministic diff + LLM classification
 
-When firms upload **arbitrary** templates and you don’t know structure in advance:
+When **two** samples are provided (primary + secondary), the system uses **`utils/two_sample_blueprint`**:
 
-```
-Template DOCX → Style + structure extraction → Structure blueprint
-       → LLM slot fill / segment → Renderer injects text → Word engine handles formatting
-```
-
-**Rule:** The renderer never invents formatting — it only fills the template skeleton.
-
-Use this when: you allow arbitrary templates, must dynamically reconstruct layout, or don’t know structure in advance. More fragile and harder to keep pixel-perfect than placeholder replacement.
-
----
-
-## Implemented (extraction path)
-
-### Upgrade 1 — Style-only injection (critical)
-- **No manual formatting.** When `template_structure` is present we assign `paragraph.style = template_style` and add text only.
-- **Clone styles utility:** `clone_styles(src_doc, dst_doc)` in `utils/style_extractor.py`.
-- Word handles indentation, numbering, spacing from the template’s style definitions.
-
-### Upgrade 2 — No fake numbering
-- Leading "1. " etc. from LLM output is stripped; numbering comes from the template’s list style.
-
-### Upgrade 3 — Section replication
-- Template section preserved; no margin override after `clear_document_body(doc)`.
-
-### Upgrade 4 — Preserve blank paragraphs
-- `remove_trailing_empty_and_noise(doc)` skipped when slot-fill was used.
-
-### Upgrade 5 — Structure-driven renderer
-- Slot-fill only; LLM fills slots; renderer injects text into template styles and block kinds.
-
----
-
-## TODO (extraction path, if kept)
-
-- Real numbering cloning (abstract numbering from template XML).
-- Caption table replication (clone table structure, fill cells).
-- Section replication when building from a new doc (clone `sectPr`).
+1. **Extract units:** Both DOCX to `TextUnit` list in document order (`extract_units(doc)` via `iter_body_blocks`). Same extraction for both; stable `unit_id` (e.g. `u:0012`).
+2. **Structural diff:** Align segments by position; for each pair where text differs, compute word-level diff to get differing spans (in primary’s coordinates). `diff_documents(doc_primary, doc_secondary)`.
+3. **Classify spans:** Each differing span is sent to the LLM with context (or a heuristic fallback): “Sample 1: X, Sample 2: Y, context: … → assign one semantic field name” (e.g. `PLAINTIFF_NAME`, `DEFENDANT_NAME`, `ACCIDENT_DATE`). Controlled vocabulary + optional new `UPPER_SNAKE_CASE` names.
+4. **Classify (constrained LLM or heuristic):** One compact JSON payload with all diffs; LLM returns `mappings`: anchor to `field_name`, `field_type`, `confidence`, `notes`. If LLM is unavailable, `_heuristic_classify()` uses context. **Apply placeholders:** replace from end to start per unit; save primary as `template.docx`, build schema, merge with secondary keys for validation_info.
+5. Hardening: `filter_boilerplate_diffs()` drops long, low-similarity spans (structure drift).
 
 ---
 
@@ -74,8 +32,12 @@ Use this when: you allow arbitrary templates, must dynamically reconstruct layou
 
 | File | Role |
 |------|------|
-| `utils/placeholder_docx.py` | **Fixed templates:** `replace_placeholders()`, `generate_from_template()` — open, replace, save. |
-| `utils/style_extractor.py` | Extract styles, template structure, line samples; `clone_styles()` (arbitrary-template path). |
-| `utils/formatter.py` | `inject_blocks()`, `clear_document_body()` (arbitrary-template path). |
-| `utils/llm_formatter.py` | Slot-fill / segment: LLM maps raw text to template slots or blocks. |
-| `backend.py` | Current flow: extract → LLM → inject. For fixed templates, call `generate_from_template()` with Analyzer output instead. |
+| `utils/placeholder_docx.py` | Run-safe scalar replacement: `replace_placeholders()`, `generate_from_template()`. |
+| `utils/template_builder.py` | Sample → template (single-sample): run map, heuristics, run-safe placeholder insertion, schema. Entry: `sample_to_template()`. |
+| `utils/two_sample_blueprint.py` | Two-sample pipeline: `TextUnit`/`SpanDiff`, `extract_units()`, `align_units()`, `char_span_diffs()`, `collect_span_diffs()`, LLM payload + `parse_llm_mappings()`, `apply_placeholders_to_docx()`, `infer_placeholders_from_two_docx()`. |
+| `utils/structural_diff.py` | Legacy/alt: `doc_to_segments()`, `diff_documents()` (paragraph-level diff). |
+| `utils/template_filler.py` | Load schema, validate JSON, scalar + block merge, run normalization. Entry: `fill_template()`. Prompt helper: `build_template_fill_prompt()`, `parse_llm_json_response()`. |
+| `utils/style_extractor.py` | `iter_body_blocks(doc)`, template structure extraction (used by template_builder and two_sample_blueprint). |
+| `utils/formatter.py` | Minimal: `force_legal_run_format()` / `force_legal_run_format_document()` only (used by template_filler after merge). |
+| `utils/llm_formatter.py` | Stub; previous block-segmentation path removed. Use `template_filler` for schema + case facts → JSON. |
+| `backend.py` | Template workflow: `build_template_from_sample(primary, secondary=None)` uses `infer_placeholders_from_two_docx` when secondary provided; `fill_template_from_json()`, `get_document_preview_text()`. |
