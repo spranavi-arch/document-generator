@@ -3,9 +3,9 @@ Divide two uploaded documents into logical sections (name and purpose only).
 Extraction is done separately in chunked calls so the full document content is never truncated.
 Uses Sectioner class (OOP).
 """
-from docgen.llm_client import LLMClient
-from docgen.prompts import PromptsBuilder
-from docgen.utils import TextUtils, JsonParser
+from docgen.core.llm_client import LLMClient
+from docgen.core.prompts import PromptsBuilder
+from docgen.core.utils import TextUtils, JsonParser
 
 SECTION_KEYS = ("sections", "Sections", "items", "results", "structure", "outline")
 

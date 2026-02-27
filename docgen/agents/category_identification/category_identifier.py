@@ -1,8 +1,8 @@
 
 
 
-from .utils import JsonParser
-from .llm_client import LLMClient
+from docgen.core.utils import JsonParser
+from docgen.core.llm_client import LLMClient
 
 
 class CategoryIdentifier:

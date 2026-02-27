@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "name": "Document Title",
+    "purpose": "Any title text at the very top of the document, such as 'Demand Letter against Local Union 28'."
+  },
+  {
+    "id": 2,
+    "name": "Date",
+    "purpose": "The date the demand letter is issued."
+  },
+  {
+    "id": 3,
+    "name": "Delivery Method",
+    "purpose": "The method of delivery specified at the top, such as 'BY E-MAIL'."
+  },
+  {
+    "id": 4,
+    "name": "Recipient Block",
+    "purpose": "The name, title, organization, and address of the opposing party or counsel receiving the letter."
+  },
+  {
+    "id": 5,
+    "name": "Subject Line",
+    "purpose": "The 'Re:' line providing a brief description of the legal claim and location."
+  },
+  {
+    "id": 6,
+    "name": "Epigraph / Corporate Policy Quote",
+    "purpose": "Any quoted corporate policy or prefatory text appearing before the salutation."
+  },
+  {
+    "id": 7,
+    "name": "Salutation",
+    "purpose": "The greeting to the recipient, such as 'Dear Mr. Starace,' or 'Dear Mr. Berry,'."
+  },
+  {
+    "id": 8,
+    "name": "Introduction",
+    "purpose": "Opening paragraphs identifying the representing law firm, the aggrieved client, and the core legal claims or historical context."
+  },
+  {
+    "id": 9,
+    "name": "Factual Background",
+    "purpose": "Unheaded narrative paragraphs detailing the initial incidents, context, or summary of the discriminatory or harassing conduct."
+  },
+  {
+    "id": 10,
+    "name": "II. Inconsistencies with Findings",
+    "purpose": "Specific section headed 'II. Inconsistencies with Findings' detailing the trial committee findings and discrepancies."
+  },
+  {
+    "id": 11,
+    "name": "III. Lack of Termination shows room for Negligence Retention",
+    "purpose": "Specific section headed 'III. Lack of Termination shows room for Negligence Retention' detailing the union's leniency and the client's police report."
+  },
+  {
+    "id": 12,
+    "name": "Timeline of Discriminatory Conduct",
+    "purpose": "Specific section headed 'Timeline of Discriminatory Conduct' detailing the day-by-day chronological events of the dispute."
+  },
+  {
+    "id": 13,
+    "name": "Legal Violations",
+    "purpose": "Section headed 'IV. Local Union 28\u2019s Conduct Violates the Law' or 'JLR\u2019s Conduct Violates the Law' detailing how the opposing party's conduct violates specific statutes."
+  },
+  {
+    "id": 14,
+    "name": "Conclusion",
+    "purpose": "Section headed 'IV. Conclusion' or 'Conclusion' stating the client's emotional distress, threat of imminent litigation, and potential for punitive damages."
+  },
+  {
+    "id": 15,
+    "name": "Good Faith Settlement Offer",
+    "purpose": "Paragraph stating that the letter is sent in a good faith effort to resolve the matter without litigation."
+  },
+  {
+    "id": 16,
+    "name": "Spoliation / Preservation of Evidence Notice",
+    "purpose": "Formal demand reminding the recipient to take immediate steps to preserve all relevant physical, electronic, and communicative records."
+  },
+  {
+    "id": 17,
+    "name": "Call to Action / Deadline",
+    "purpose": "Paragraph providing a specific deadline date by which the recipient must contact the firm to discuss an amicable resolution."
+  },
+  {
+    "id": 18,
+    "name": "Signature Block",
+    "purpose": "The sign-off (e.g., 'Yours truly,') and the printed name of the attorney."
+  }
+]

@@ -149,7 +149,7 @@ class CurlParser:
             return ""
         if subscription_key is None or body_template is None:
             try:
-                from docgen.config import CHAT_API_SUBSCRIPTION_KEY, CHAT_API_BODY_TEMPLATE
+                from docgen.core.config import CHAT_API_SUBSCRIPTION_KEY, CHAT_API_BODY_TEMPLATE
                 if subscription_key is None:
                     subscription_key = CHAT_API_SUBSCRIPTION_KEY
                 if body_template is None:
@@ -188,7 +188,7 @@ class CurlParser:
         if "curl " in s.lower() or "https://" in s or "http://" in s:
             return s
         try:
-            from docgen.config import CHAT_API_URL
+            from docgen.core.config import CHAT_API_URL
             url = (api_url or "").strip() or CHAT_API_URL
         except Exception:
             url = (api_url or "").strip()
@@ -207,7 +207,7 @@ class FieldFetcher:
         if llm_client:
             self._llm = llm_client
         else:
-            from docgen.llm_client import LLMClient
+            from docgen.core.llm_client import LLMClient
             self._llm = LLMClient()
 
     @staticmethod
@@ -585,16 +585,11 @@ Example:
 
             try:
                 # Call LLM with schema
-                raw_resp = self._llm.generate(prompt, json_mode=True, max_tokens=1000, response_schema=schema)
+                raw_resp = self._llm.generate(prompt, json_mode=True, max_tokens=4096, response_schema=schema)
                 
-                # Parse JSON safely
-                clean_resp = raw_resp.strip()
-                if "```json" in clean_resp:
-                    clean_resp = clean_resp.split("```json")[1].split("```")[0]
-                elif "```" in clean_resp:
-                    clean_resp = clean_resp.split("```")[1].split("```")[0]
-                    
-                data = json.loads(clean_resp)
+                # Use robust JsonParser instead of fragile regex/string splitting
+                from docgen.core.utils import JsonParser
+                data = JsonParser.extract_json_from_llm(raw_resp)
                 
                 if not data:
                     continue
@@ -629,28 +624,9 @@ Example:
                         
                     results[field] = {"value": val, "confidence": conf}
 
-            except json.JSONDecodeError:
-                print(f"[FieldFetcher]     - Error: LLM returned invalid JSON. Response: {raw_resp[:200]}...")
-                # Try to salvage partial valid JSON if it's just extra text
-                try:
-                    # Sometimes LLMs add text after the JSON
-                    match = re.search(r'(\{.*"items":\s*\[.*\]\})', clean_resp, re.DOTALL)
-                    if match:
-                        data = json.loads(match.group(1))
-                        # Process results logic (duplicated from above for robustness)
-                        items_list = []
-                        if isinstance(data, dict):
-                            if "items" in data and isinstance(data["items"], list):
-                                items_list = data["items"]
-                        for item in items_list:
-                            if not isinstance(item, dict): continue
-                            field = item.get("field")
-                            val = str(item.get("value", "")).strip()
-                            conf = str(item.get("confidence", "LOW")).upper()
-                            if not field or not val or val.lower() in ("null", "none", "n/a"): continue
-                            results[field] = {"value": val, "confidence": conf}
-                except:
-                    pass
+            except ValueError as e:
+                # JsonParser raises ValueError if it can't parse
+                print(f"[FieldFetcher]     - Error: {e}. Full Response:\n{raw_resp}")
             except Exception as e:
                 print(f"[FieldFetcher]     - Error processing chunk: {e}")
         
@@ -668,7 +644,7 @@ Example:
         Iteratively processes documents to find missing fields.
         Uses DocumentFetcher to handle Azure Search and temp file storage.
         """
-        from docgen.document_fetcher import DocumentFetcher
+        from docgen.agents.data_retrieval.document_fetcher import DocumentFetcher
 
         print(f"\n[FieldFetcher] Starting search for case_id={case_id} (firm_id={firm_id})")
         print(f"[FieldFetcher] Required fields: {required_fields}")
@@ -816,7 +792,7 @@ Example:
 
 
 def _default_question_for_field(field_name: str) -> str:
-    from docgen.question_generator import _fallback_question
+    from docgen.agents.data_retrieval.question_generator import _fallback_question
     return _fallback_question(field_name)
 
 

@@ -1,0 +1,171 @@
+[
+  {
+    "prompt": "You are an AI legal assistant. Your task is to generate ONLY the 'Document Title' section of a Pre-Litigation Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Document Title. It contains exactly: a single line of text stating the type of document and the party it is directed against (e.g., '[document_type] against [opposing_party_name]'). Do NOT include the header, date, recipient address, subject line, salutation, or any content that belongs to the previous or next section.\n2. DATA FROM FIELD DATA ONLY: All variable facts (such as the document type and opposing party name) must come from the provided Field data. If a piece of data is missing, output the exact placeholder [field_name]. Do not invent or hallucinate any facts, names, or details.\n3. OUTPUT: Provide only the actual document text for this section. Do not include any summaries, introductions, or meta-commentary. Document text only.\n4. LEGAL PROSE: Use formal legal phrasing appropriate for a document title. Do not use markdown formatting, bolding, or bullet points.\n5. ONE SECTION ONLY: The prompt must instruct the model to output ONLY the content for this section and to stop immediately before the next section's heading or content.",
+    "required_fields": [
+      "document_type",
+      "opposing_party_name"
+    ]
+  },
+  {
+    "prompt": "This section is the Date. It contains exactly: the date the demand letter is issued. Do NOT include the delivery method, recipient name, address, subject line, or any other header information. All variable facts must come from Field data. If the date is missing, output [letter_date]. Output ONLY the actual document text for this section. No summaries, no meta-commentary, and no markdown formatting. Output the date in a standard formal format (e.g., 'DATE: [letter_date]' or '[Month] [Day], [Year]'). Stop generating immediately after outputting the date.",
+    "required_fields": [
+      "letter_date"
+    ]
+  },
+  {
+    "prompt": "This section is the Delivery Method. It contains exactly: the specified method of delivery for the document (e.g., 'BY E-MAIL'). Do NOT include the date, recipient name, recipient address, subject line, or any other header information.\n\nDATA FROM FIELD DATA ONLY: All variable facts come from Field data. Use the `delivery_method` field. Missing \u2192 `[delivery_method]`. No invented facts.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nFORMAT: Output the delivery method in ALL CAPS, typically formatted as 'BY [DELIVERY METHOD]' (e.g., 'BY E-MAIL' or 'BY CERTIFIED MAIL'). Do not use bullets or markdown.\n\nONE SECTION ONLY: Output ONLY the content for this section and stop before the recipient's name, address, or the next section's heading.",
+    "required_fields": [
+      "delivery_method"
+    ]
+  },
+  {
+    "prompt": "You are generating the 'Recipient Block' section of a Pre-Litigation Demand Letter. This section is the Recipient Block. It contains exactly: the name, title, organization, and full mailing address of the opposing party or counsel receiving the letter. Do NOT include the date, delivery method, subject line, salutation, or any other part of the document. All variable facts (names, titles, organizations, addresses) come from Field data. If a piece of data is missing, output the exact string [field_name]. Do not invent or hallucinate any facts. Output ONLY the actual document text for this section. No summaries, no meta-commentary. Format the output as a standard multi-line mailing address block, with each component on a new line (e.g., Name \\n Title \\n Organization \\n Address). Do not use markdown formatting, bolding, or bullets. Output ONLY the content for this section and stop immediately before the next section's heading or content.",
+    "required_fields": [
+      "recipient_name",
+      "recipient_title",
+      "recipient_organization",
+      "recipient_address"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the 'Subject Line' section of a Pre-Litigation Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Subject Line. It contains exactly: the 'Re:' line providing a brief description of the legal claim and the name of the defendant or location. Do NOT include the Header (Date, Recipient), Salutation, Introduction, or any other content that belongs to the previous or next sections.\n2. DATA FROM FIELD DATA ONLY: All variable facts (legal claim, defendant name) come from Field data. If a field is missing, output the exact placeholder [field_name]. No invented facts.\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n4. LEGAL PROSE: Continuous formal legal prose; no bullets or markdown. The output should strictly follow the format: 'Re: [legal_claim] at [defendant_name]'. Adapt the legal language to the new case type (do not copy the sample's cause-of-action wording if it does not fit the provided field data).\n5. ONE SECTION ONLY: The prompt must instruct the model to output ONLY the content for this section and to stop before the next section's heading or content.",
+    "required_fields": [
+      "legal_claim",
+      "defendant_name"
+    ]
+  },
+  {
+    "prompt": "This section is the Epigraph / Corporate Policy Quote. It contains exactly: a direct quotation of the opposing party's corporate policy (typically regarding diversity, equality, or non-discrimination), followed by a citation attributing the quote to the specific company and policy name. Do NOT include the Header, Subject Line, Salutation, or any subsequent introductory paragraphs.\n\nDATA FROM FIELD DATA ONLY: All variable facts (quote text, company name, policy name) come from Field data. Missing \u2192 [field_name]. No invented facts.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Present the text exactly as a formal epigraph. Enclose the policy text in quotation marks. On the following line, provide the citation preceded by a hyphen (e.g., '-[company_name] [corporate_policy_name]'). Do not use bullet points or markdown formatting other than standard punctuation.\n\nONE SECTION ONLY: Output ONLY the content for this section and stop immediately after the policy citation. Do not generate the Salutation or Introduction.",
+    "required_fields": [
+      "corporate_policy_quote",
+      "company_name",
+      "corporate_policy_name"
+    ]
+  },
+  {
+    "prompt": "You are an AI assistant tasked with generating the 'Salutation' section of a Pre-Litigation Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Salutation. It contains exactly: the formal greeting to the recipient. Do NOT include the Header, Subject Line, Introduction, or any other preceding or subsequent sections.\n2. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided Field data. If a piece of data is missing, output the exact placeholder [field_name]. Do not invent any names, titles, or facts.\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n4. LEGAL PROSE: The output must be a standard formal legal greeting. Do not use bullets or markdown.\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately. The format should be exactly: 'Dear [recipient_title] [recipient_last_name],'.",
+    "required_fields": [
+      "recipient_title",
+      "recipient_last_name"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the \"Introduction\" section for a Pre-Litigation Demand Letter. \n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Introduction. It contains exactly: the formal statement of representation (e.g., \"We have the tremendous privilege of representing...\"), the client's name and relevant background/protected class, the opposing party's name and location, the core legal claims (e.g., sexual harassment, race discrimination), the specific statutes violated, and a brief, high-level summary of the context of the dispute (e.g., transpired through text message, during the purchase of a vehicle). If applicable to the claim type (like civil rights or discrimination), it may include a brief historical or legal context emphasizing the severity of the violation. Do NOT include the detailed chronological narrative of incidents, which belongs in the subsequent \"Factual Background / Timeline\" section. Do NOT include the header, subject line, or salutation.\n\n2. DATA FROM FIELD DATA ONLY: Use only the provided field data to populate the variables. If a piece of data is missing, output the exact placeholder [field_name]. Do not invent facts, names, dates, or locations.\n\n3. OUTPUT: Output only the actual document text for this section. Do not include any introductory remarks, summaries, or meta-commentary.\n\n4. LEGAL PROSE: Write in continuous, formal, and persuasive legal prose. Do not use bullet points or markdown formatting. Adapt the legal language and historical context to the specific case type and claims provided in the field data.\n\n5. ONE SECTION ONLY: Output ONLY the content for the Introduction section. Stop immediately after the introductory paragraphs and before the Factual Background heading.",
+    "required_fields": [
+      "client_names",
+      "client_background",
+      "client_protected_class",
+      "opposing_party_name",
+      "opposing_party_location",
+      "nature_of_claims",
+      "applicable_statutes",
+      "incident_context_summary"
+    ]
+  },
+  {
+    "prompt": "This section is the Factual Background. It contains exactly: unheaded narrative paragraphs detailing the initial incidents, context, and summary of the discriminatory or harassing conduct. Do NOT include the Introduction or Legal Violations sections.\n\nUse ONLY provided field data. Missing data -> [field_name]. Do not invent facts.\n\nOutput ONLY the document text for this section. No summaries, no markdown, no commentary.\n\nWrite in continuous, formal legal prose. Adapt the narrative to the specific case type and facts provided. Stop immediately after completing the factual narrative.",
+    "required_fields": [
+      "client_name",
+      "opposing_party_name",
+      "bad_actor_name",
+      "incident_context",
+      "harassment_or_discrimination_details",
+      "discovery_of_harassment_details",
+      "emotional_or_financial_damages",
+      "actions_taken_by_opposing_party",
+      "applicable_statutes"
+    ]
+  },
+  {
+    "prompt": "This section is 'II. Inconsistencies with Findings'. It contains exactly: an analysis of the discrepancies in the disciplinary findings regarding the harasser, highlighting the plaintiff's presentation of evidence (e.g., screenshots, messages) during committee proceedings, the harasser's initial termination for violating no-contact orders, and the contrasting final penalties (counts, fines, training). It concludes by emphasizing the union/employer's lack of clarity, the open possibility of the harasser's return, and the resulting ongoing uneasiness for the plaintiff. Do NOT include the factual background/timeline (which belongs to the previous section) or the legal violations/spoliation notice (which belong to subsequent sections).\n\nDATA FROM FIELD DATA ONLY: All variable facts (names, entities, penalties, counts) must come from the provided field data. If a piece of data is missing, insert the exact placeholder [field_name]. Do not invent any facts, amounts, or names.\n\nOUTPUT: Generate only the actual document text for this section. Begin exactly with the heading 'II.  Inconsistencies with Findings'. Do not include any summaries, introductory filler, or meta-commentary. Document text only.\n\nLEGAL PROSE: Write in continuous, formal legal prose. Do not use bullet points or markdown formatting for the text body. Adapt the legal language to fit the specific case type and harassment type provided in the field data.\n\nONE SECTION ONLY: You must output ONLY the content for this specific section. Stop generating immediately after the final paragraph describing the plaintiff's uneasiness. Do not generate the next section's heading or content.",
+    "required_fields": [
+      "plaintiff_last_name",
+      "harasser_last_name",
+      "employer_name",
+      "committee_name",
+      "number_of_counts",
+      "fine_amount",
+      "training_hours",
+      "harassment_type",
+      "union_name"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the section titled 'III. Lack of Termination shows room for Negligence Retention' for a Pre-Litigation Demand Letter.\n\nThis section is 'III. Lack of Termination shows room for Negligence Retention'. It contains exactly:\n1. The section heading.\n2. A narrative paragraph explaining that on [harassment_start_date], [client_last_name] began experiencing harassment from [harasser_last_name] after exchanging numbers for work-related purposes. It must note that their interactions were strictly professional, that [harasser_last_name] managed to obtain [client_last_name]'s new phone number after she changed it (due to necessary work-related communications), and that she explained the unwanted and explicit messages to her coworkers.\n3. A paragraph arguing that despite knowing the extent of the harassment endured over [harassment_duration], [organization_name] left the possibility open for [harasser_last_name]'s return. It should emphasize that this leniency raises concerns about the organization's commitment to protecting its members and creates a fear of repeat offenses if the harasser is reinstated.\n4. A concluding paragraph stating that on [police_report_date], [client_last_name] met with the [police_department_name] because of the immense harassment, and that seeking police assistance demonstrates the severe impact of [harasser_last_name]'s actions on her well-being.\n\nDo NOT include the general factual background that precedes this section, nor the specific statutory legal violations, damages, or spoliation notices that follow it.\n\nDATA FROM FIELD DATA ONLY: All variable facts (names, dates, organizations, durations) must come from the provided Field data. If a piece of data is missing, output exactly the bracketed placeholder (e.g., [client_last_name]). Do not invent any facts, names, or dates.\n\nOUTPUT: Produce only the actual document text for this section. No summaries, no meta-commentary, no conversational filler. \n\nLEGAL PROSE: Use continuous, formal legal prose. Do not use bullet points or markdown formatting (other than standard paragraph breaks and the section heading). Adapt the legal language appropriately to the specific case type if the provided fields indicate a different context, but maintain the core argument regarding negligent retention and failure to terminate.",
+    "required_fields": [
+      "harassment_start_date",
+      "client_last_name",
+      "harasser_last_name",
+      "harassment_duration",
+      "organization_name",
+      "police_report_date",
+      "police_department_name"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Timeline of Discriminatory Conduct' section for a Pre-Litigation Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Factual Background / Timeline. It contains exactly: a detailed, day-by-day chronological narrative of the incidents causing harm. It must detail the initial transaction attempt, the discriminatory hurdles faced by the client and their spouse (e.g., rejecting lawful documentation, unauthorized credit checks), the retaliatory actions taken by the opposing party following a truthful online review, and the eventual resolution of the immediate standoff after third-party intervention. Do NOT include the Introduction, Legal Violations (statutory analysis), Conclusion, Damages, or Spoliation Notice.\n\n2. DATA FROM FIELD DATA ONLY: All variable facts (names, dates, items, amounts, actors) must come from the provided field data. If a piece of data is missing, insert the exact placeholder [field_name]. Do not invent any facts, dates, or names.\n\n3. OUTPUT: Generate only the actual document text for this section. Start immediately with the section heading 'Timeline of Discriminatory Conduct'. Do not include any summaries, meta-commentary, or introductory remarks outside of the document text.\n\n4. LEGAL PROSE: Use continuous formal legal prose. Format each timeline entry as a new paragraph starting with the date followed by a colon (e.g., '[event_date_1]: [Narrative...]'). Do not use bullet points or markdown lists. Adapt the legal language to fit the specific cause of action and facts provided in the field data, maintaining an assertive tone that highlights the opposing party's animus, retaliation, and unreasonable conduct while framing the client's actions as lawful exercises of their rights.\n\n5. ONE SECTION ONLY: Output ONLY the content for this section. Stop generating immediately after the final timeline event paragraph. Do not bleed into the subsequent legal analysis section.",
+    "required_fields": [
+      "client_name",
+      "client_spouse_name",
+      "opposing_business_name",
+      "vehicle_make_and_model",
+      "deposit_amount",
+      "general_manager_name",
+      "salesperson_name",
+      "other_manager_name",
+      "intervening_official_name",
+      "event_date_1",
+      "event_date_2",
+      "event_date_3",
+      "event_date_4",
+      "event_date_5",
+      "event_date_6",
+      "event_date_7"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Legal Violations' section of a Pre-Litigation Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is 'Legal Violations'. It contains exactly: a heading asserting that the opposing party's conduct violates the law; a formal statement of representation of the client regarding their specific legal claims against the opposing party; and a concluding assertion that the incident illustrates the opposing party's disregard for the law (and/or failure to protect the client from a bad actor), explicitly stating that the conduct violates specific statutes. Do NOT include the factual background/timeline (previous section) or the conclusion/damages/spoliation notice (next sections).\n\n2. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided fields. If a field is missing, output the exact placeholder [field_name]. Do not invent any facts, names, or statutes.\n\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\n4. LEGAL PROSE: Use continuous formal legal prose. Adapt the allegations and legal language to the specific case type provided in the fields (e.g., do not use sexual harassment language if the claim is racial discrimination or a consumer dispute).\n\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop.\n\nDrafting Instructions:\n- Heading: '[opposing_party_name]\u2019s Conduct Violates the Law' (Precede with a Roman numeral if appropriate).\n- Body Paragraph(s): State the privilege of representing [client_name] in connection with their [legal_claims] against [opposing_party_name] (and any other entities/locations like [incident_location]) in violation of [violated_statutes]. State that the incident illustrates [opposing_party_name]'s disregard for the law (or protecting its employees/clients, depending on [opposing_party_type]). Conclude that the conduct toward [client_name] (and failure to protect from [bad_actor_name], if applicable) violates [violated_statutes].",
+    "required_fields": [
+      "opposing_party_name",
+      "client_name",
+      "legal_claims",
+      "incident_location",
+      "violated_statutes",
+      "opposing_party_type",
+      "bad_actor_name"
+    ]
+  },
+  {
+    "prompt": "This section is the 'Conclusion'. It contains exactly: a heading ('Conclusion' or numbered appropriately), a statement expressing the client's devastation regarding the opposing party's specific mistreatment or failures, a declaration of the client's commitment to achieving complete vindication for the violations, a formal threat to commence litigation immediately, and an assertion that a jury would render a large award in the client's favor (mentioning punitive damages and specific statutes if provided in the field data). Do NOT include the Spoliation / Preservation of Evidence Notice, the Call to Action / Deadline, or any sign-offs, as those belong in subsequent sections. All variable facts must come from the provided Field data. If a piece of data is missing, insert the exact placeholder [field_name]. Do not invent facts, names, or statutes. Output ONLY the actual document text for this section. Use continuous, formal legal prose. Do not include any summaries, meta-commentary, or markdown formatting other than standard paragraph breaks.",
+    "required_fields": [
+      "client_name",
+      "opposing_party_name",
+      "summary_of_harm_or_mistreatment",
+      "applicable_statutes_for_damages"
+    ]
+  },
+  {
+    "prompt": "This section is the Good Faith Settlement Offer. It contains exactly: a brief statement (usually one sentence) asserting that the letter is sent in a good faith effort to resolve the matter without litigation, or to present the opposing party with an opportunity to avoid costly and protracted litigation that could result in substantial liability. Do NOT include the specific deadline for response, the spoliation/preservation of evidence notice, the specific damages demanded, or the signature block (these belong to other sections). All variable facts must come from Field data. If a required fact is missing, use the exact placeholder [field_name]. Do not invent facts. Output ONLY the actual document text for this section. No summaries, no meta-commentary, no markdown formatting, and no bullet points. Write in continuous formal legal prose. Stop generating immediately after this single paragraph.",
+    "required_fields": [
+      "opposing_party_name"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the 'Spoliation / Preservation of Evidence Notice' section of a Pre-Litigation Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Spoliation / Preservation of Evidence Notice. It contains exactly: a formal reminder to the opposing party of their obligation to take immediate steps to preserve all relevant material (including emails, instant messages, voicemails, text messages, documents, and electronically stored information) and to preserve devices (personal and business hard drives, back-up tapes, cellular telephones, computers, laptops) of all individuals potentially having knowledge related to the action. Do NOT include the preceding sections (Conclusion / Damages) or the following sections (Call to Action / Deadline, Sign-off).\n2. DATA FROM FIELD DATA ONLY: All variable facts come from Field data. Missing \u2192 [field_name]. No invented facts.\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n4. LEGAL PROSE: Continuous formal legal prose; no bullets or markdown.\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop before the next section's heading or content.",
+    "required_fields": [
+      "opposing_party_name"
+    ]
+  },
+  {
+    "prompt": "This section is the Call to Action / Deadline. It contains exactly: a single paragraph instructing the recipient to contact the firm no later than the end of the day on a specified deadline date if they are interested in discussing an amicable resolution short of litigation, followed by a warning that otherwise, the firm will move forward without further notice. Do NOT include the Spoliation / Preservation of Evidence Notice (which precedes this) or the Sign-off and Signature (which follows this). All variable facts must come from the provided Field data. Use the field `response_deadline_date` for the deadline. If the field is missing, output `[response_deadline_date]`. Do not invent any dates or facts. Output ONLY the actual document text for this section. No summaries, no meta-commentary, no markdown formatting, and no bullet points. Provide continuous formal legal prose.",
+    "required_fields": [
+      "response_deadline_date"
+    ]
+  },
+  {
+    "prompt": "This section is the Signature Block. It contains exactly: the sign-off ('Yours truly,') and the printed name of the attorney sending the letter. Do NOT include the Call to Action / Deadline section that precedes it, or any enclosures, CC lists, or firm addresses that might follow it.\n\nAll variable facts (attorney name) come from Field data. Missing \u2192 [field_name]. No invented facts.\n\nOutput ONLY the actual document text for this section. No summaries, no meta-commentary. Document text only. Do not use markdown formatting or bullet points. Output exactly the sign-off followed by the attorney's name on the next line.",
+    "required_fields": [
+      "attorney_name"
+    ]
+  }
+]

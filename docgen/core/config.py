@@ -12,7 +12,7 @@ class Config:
     Single responsibility: load and expose environment-based settings.
     """
 
-    _project_root = Path(__file__).resolve().parent.parent
+    _project_root = Path(__file__).resolve().parent.parent.parent
     _backend_env = _project_root / "backend" / ".env"
     _root_env = _project_root / ".env"
 

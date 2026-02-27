@@ -3,8 +3,8 @@ Generate a natural-language question for each required field, so we can call the
 Uses QuestionGenerator class (OOP).
 """
 import json
-from docgen.llm_client import LLMClient
-from docgen.utils import JsonParser
+from docgen.core.llm_client import LLMClient
+from docgen.core.utils import JsonParser
 
 
 class QuestionGenerator:

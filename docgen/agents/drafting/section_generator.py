@@ -3,8 +3,8 @@ Generate one section using the section prompt, extracted sample text for this se
 Uses pre-extracted section sample text (no full-doc pass).
 Uses SectionGenerator class (OOP).
 """
-from docgen.llm_client import LLMClient
-from docgen.prompts import PromptsBuilder
+from docgen.core.llm_client import LLMClient
+from docgen.core.prompts import PromptsBuilder
 
 
 class SectionGenerator:

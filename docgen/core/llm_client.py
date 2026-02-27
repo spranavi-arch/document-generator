@@ -1,7 +1,7 @@
 """
 LLM client for OpenAI/Azure/Gemini. Uses Config and encapsulates client/model in the class (OOP).
 """
-from docgen.config import Config
+from docgen.core.config import Config
 import time
 import os
 
@@ -95,7 +95,7 @@ class LLMClient:
         kwargs = {
             "model": self._model,
             "messages": messages,
-            "max_completion_tokens": max_tokens,
+            "max_tokens": max_tokens,
         }
         
         if response_schema:
@@ -125,8 +125,11 @@ class LLMClient:
             kwargs["temperature"] = temperature
             
         try:
-            response = self._client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content
+                response = self._client.chat.completions.create(**kwargs)
+                finish_reason = response.choices[0].finish_reason
+                if finish_reason != "stop":
+                    print(f"[LLM] Warning: finish_reason is '{finish_reason}'. Output might be truncated.")
+                return response.choices[0].message.content
         except Exception as e:
             from openai import APIConnectionError, APIError, APIStatusError, RateLimitError
             # Handle rate limiting specifically
@@ -195,6 +198,7 @@ class LLMClient:
                 contents=contents,
                 config=generate_content_config
             )
+            print(f"Gemini response RAW: {response}")
             return response.text
         except Exception as e:
             # Check for 429 in Gemini (usually in exceptions.ResourceExhausted or similar)

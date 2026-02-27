@@ -6,9 +6,9 @@ Extract section text from documents. Supports:
 
 Uses Extractor class (OOP).
 """
-from docgen.llm_client import LLMClient
-from docgen.prompts import PromptsBuilder, EXTRACTION_CHUNK_SIZE
-from docgen.utils import JsonParser
+from docgen.core.llm_client import LLMClient
+from docgen.core.prompts import PromptsBuilder, EXTRACTION_CHUNK_SIZE
+from docgen.core.utils import JsonParser
 
 MAX_EXTRACTION_TOKENS = 16384
 
@@ -28,7 +28,7 @@ class Extractor:
             return ""
         return t.strip()
 
-    def split_document_into_sections(self, doc: str, sections: list[dict]) -> list[str]:
+    def split_document_into_sections(self, doc: str, sections: list[dict], category_of_document: str, write_step2_details=None) -> list[str]:
         """
         Split the document into exactly the given sections in order. Uses chunked extraction.
         sections: list of {"name": str, "purpose": str} in reading order.
@@ -45,7 +45,11 @@ class Extractor:
             prompt = PromptsBuilder.build_split_document_into_sections_chunk_prompt(doc, sections, start, end)
             for attempt in range(2):
                 try:
-                    response = self._llm.generate(prompt, max_tokens=MAX_EXTRACTION_TOKENS, json_mode=True)
+                    response = self._llm.generate(
+                        [prompt, f"""overall structure of document which can help in generating prompt more accurately: {category_of_document}"""], 
+                        max_tokens=MAX_EXTRACTION_TOKENS, 
+                        json_mode=True
+                    )
                     data = JsonParser.extract_json_from_llm(response)
                     if isinstance(data, dict):
                         raw = data.get("sections") or data.get("Sections")
@@ -53,6 +57,8 @@ class Extractor:
                             for i, t in enumerate(raw):
                                 if start + i < n:
                                     result[start + i] = self._clean_extracted(t)
+                                    if write_step2_details:
+                                        write_step2_details(f"Section {start + i + 1} extracted: {t[:100]}...")
                     break
                 except ValueError:
                     if attempt == 1:
@@ -61,14 +67,14 @@ class Extractor:
             start = end
         return result
 
-    def extract_sections_from_docs(self, doc1: str, doc2: str, sections: list[dict]) -> list[str]:
+    def extract_sections_from_docs(self, doc1: str, doc2: str, sections: list[dict], category_of_document: str, write_step2_details=None) -> list[str]:
         """
         Split both documents into the same ordered sections, then combine per section.
         Returns list of combined sample texts (one per section, same order as sections).
         """
         n = len(sections)
-        parts1 = self.split_document_into_sections(doc1 or "", sections)
-        parts2 = self.split_document_into_sections(doc2 or "", sections)
+        parts1 = self.split_document_into_sections(doc1 or "", sections, category_of_document, write_step2_details)
+        parts2 = self.split_document_into_sections(doc2 or "", sections, category_of_document, write_step2_details)
         if len(parts1) < n:
             parts1.extend([""] * (n - len(parts1)))
         if len(parts2) < n:
@@ -117,12 +123,12 @@ class Extractor:
         return (content if isinstance(content, str) else str(content)).strip()
 
 
-def split_document_into_sections(doc: str, sections: list[dict]) -> list[str]:
-    return Extractor().split_document_into_sections(doc, sections)
+def split_document_into_sections(doc: str, sections: list[dict], category_of_document: str = "", write_step2_details=None) -> list[str]:
+    return Extractor().split_document_into_sections(doc, sections, category_of_document, write_step2_details)
 
 
-def extract_sections_from_docs(doc1: str, doc2: str, sections: list[dict]) -> list[str]:
-    return Extractor().extract_sections_from_docs(doc1, doc2, sections)
+def extract_sections_from_docs(doc1: str, doc2: str, sections: list[dict], category_of_document: str = "", write_step2_details=None) -> list[str]:
+    return Extractor().extract_sections_from_docs(doc1, doc2, sections, category_of_document, write_step2_details)
 
 
 def extract_section_from_docs(doc1: str, doc2: str, section_name: str) -> str:

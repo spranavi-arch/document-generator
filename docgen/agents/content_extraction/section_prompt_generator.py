@@ -3,9 +3,9 @@ For each section: generate (1) a prompt to create that section, (2) list of requ
 Uses extracted sample text for each section (no full-doc pass).
 Uses SectionPromptGenerator class (OOP).
 """
-from docgen.llm_client import LLMClient
-from docgen.prompts import PromptsBuilder
-from docgen.utils import JsonParser
+from docgen.core.llm_client import LLMClient
+from docgen.core.prompts import PromptsBuilder
+from docgen.core.utils import JsonParser
 
 
 class SectionPromptGenerator:

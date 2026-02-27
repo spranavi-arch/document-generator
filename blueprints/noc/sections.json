@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "name": "Document Title",
+    "purpose": "The main title at the very top of the first page (e.g., 'NOTICE OF CLAIM')."
+  },
+  {
+    "id": 2,
+    "name": "Caption",
+    "purpose": "The party names and their roles (Claimant vs. Respondent), usually enclosed in a box or separated by lines."
+  },
+  {
+    "id": 3,
+    "name": "Addressee Block",
+    "purpose": "The 'TO:' section identifying the government entities, municipalities, or agencies being served with the notice, including their addresses."
+  },
+  {
+    "id": 4,
+    "name": "Introductory Notice",
+    "purpose": "The introductory text stating 'PLEASE TAKE NOTICE that the undersigned claimant hereby makes claim...', appearing before the numbered or specific claim details."
+  },
+  {
+    "id": 5,
+    "name": "Claimant and Attorney Information",
+    "purpose": "The section or numbered paragraph detailing the name, address, and contact information of the claimant and their legal representation."
+  },
+  {
+    "id": 6,
+    "name": "Nature of Claim",
+    "purpose": "The section or numbered paragraph describing the type of action or claim (e.g., personal injury, trip and fall, negligence)."
+  },
+  {
+    "id": 7,
+    "name": "Time, Place, and Manner",
+    "purpose": "The section or numbered paragraph detailing the exact date, time, location, how the incident occurred, and all specific allegations of negligence, liability, and actual or constructive notice."
+  },
+  {
+    "id": 8,
+    "name": "Damages and Injuries",
+    "purpose": "The section or numbered paragraph describing the bodily injuries, medical expenses, pain and suffering, and other damages sustained by the claimant."
+  },
+  {
+    "id": 9,
+    "name": "Demand and Intent to Sue",
+    "purpose": "The text stating the total amount claimed, the presentation of the claim for adjustment, and the claimant's intent to commence an action if the claim is not paid."
+  },
+  {
+    "id": 10,
+    "name": "Attachments List",
+    "purpose": "The list of attached documents, such as photographs or verification pages, appearing at the end of the main notice text."
+  },
+  {
+    "id": 11,
+    "name": "Date",
+    "purpose": "The date the main notice of claim was signed or executed, appearing before the main signature block."
+  },
+  {
+    "id": 12,
+    "name": "Signature Block",
+    "purpose": "The signature line, printed name, and contact information of the attorney or claimant signing the main notice of claim."
+  },
+  {
+    "id": 13,
+    "name": "Verification Heading",
+    "purpose": "The title indicating the start of the verification section (e.g., 'VERIFICATION' or 'ATTORNEY'S VERIFICATION')."
+  },
+  {
+    "id": 14,
+    "name": "Verification Venue and Body",
+    "purpose": "The State and County venue block (e.g., 'STATE OF NEW YORK...') and the sworn statement affirming the truth of the document's contents."
+  },
+  {
+    "id": 15,
+    "name": "Verification Date and Signature",
+    "purpose": "The date and signature block for the individual (claimant or attorney) swearing to the verification."
+  },
+  {
+    "id": 16,
+    "name": "Litigation Backer",
+    "purpose": "The cover page or backer at the very end of the document, containing the repeated caption, document title, attorney information, and any service, entry, or settlement notices."
+  }
+]

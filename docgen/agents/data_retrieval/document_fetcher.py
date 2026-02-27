@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import uuid
 from typing import Any, List, Dict, Generator, Optional
-from docgen.config import Config
+from docgen.core.config import Config
 
 try:
     from azure.core.credentials import AzureKeyCredential

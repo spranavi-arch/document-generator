@@ -4,6 +4,7 @@ import sys
 import time
 import tempfile
 import subprocess
+import shutil
 from pathlib import Path
 from io import BytesIO
 import streamlit as st
@@ -50,15 +51,16 @@ def text_to_docx_bytes(text: str) -> bytes:
 # -------------------------
 # Backend (OOP classes)
 # -------------------------
-from docgen.sectioner import Sectioner
-from docgen.extractor import Extractor
-from docgen.section_prompt_generator import SectionPromptGenerator
-from docgen.field_fetcher import FieldFetcher, _default_question_for_field
-from docgen.question_generator import QuestionGenerator
-from docgen.section_generator import SectionGenerator
-from docgen.assembler import Assembler
-from docgen.category_identifier import CategoryIdentifier
-from docgen.llm_client import LLMClient
+from docgen.agents.structure_identification.sectioner import Sectioner
+from docgen.agents.content_extraction.extractor import Extractor
+from docgen.agents.content_extraction.section_prompt_generator import SectionPromptGenerator
+from docgen.agents.data_retrieval.field_fetcher import FieldFetcher, _default_question_for_field
+from docgen.agents.data_retrieval.question_generator import QuestionGenerator
+from docgen.agents.drafting.section_generator import SectionGenerator
+from docgen.agents.drafting.assembler import Assembler
+from docgen.agents.category_identification.category_identifier import CategoryIdentifier
+from docgen.core.llm_client import LLMClient
+from docgen.core.blueprint_manager import BlueprintManager
 
 # -------------------------
 # Sidebar
@@ -78,8 +80,12 @@ with st.sidebar:
     st.divider()
 
     st.header("Inputs")
+    # Blueprint input
+    blueprint_name = st.text_input("Blueprint Name", help="Enter a name to save analysis or load an existing blueprint.")
+    
     sample1 = st.file_uploader("Sample document 1", type=["txt", "docx"])
     sample2 = st.file_uploader("Sample document 2", type=["txt", "docx"])
+    
     curl_input = st.text_area("Case ID or CURL command", height=120)
     firm_id_input = st.number_input("Firm ID (for Case Search)", value=1680, step=1)
     extra_context = st.text_area("Extra context (optional)", height=100)
@@ -124,28 +130,55 @@ def run_pipeline():
     llm_client = LLMClient(provider=os.getenv("LLM_PROVIDER", "azure"))
     question_generator = QuestionGenerator(llm_client=llm_client)
     
-    # --- TRIAL USAGE END ---
-    if not sample1 or not sample2:
-        st.error("Upload both sample documents.")
-        return
+    # --- BLUEPRINT MANAGER ---
+    bpm = BlueprintManager(blueprint_name, _root) if blueprint_name else None
+    
+    # --- LOAD / READ SAMPLES ---
+    sample1_bytes = None
+    sample2_bytes = None
+    s1_name = "sample1.txt"
+    s2_name = "sample2.txt"
 
-    try:
-        sample1_bytes = sample1.read()
-        sample2_bytes = sample2.read()
-    except Exception as e:
-        st.error(f"Could not read uploaded files: {e}")
+    # 1. Try uploads
+    if sample1 and sample2:
+        try:
+            sample1_bytes = sample1.read()
+            sample2_bytes = sample2.read()
+            s1_name = sample1.name
+            s2_name = sample2.name
+            
+            # Save to blueprint if active
+            if bpm:
+                bpm.save_bytes(s1_name, sample1_bytes)
+                bpm.save_bytes(s2_name, sample2_bytes)
+                bpm.save_json("samples_meta.json", {"s1": s1_name, "s2": s2_name})
+                st.caption(f"Saved samples to blueprint '{bpm.name}'")
+        except Exception as e:
+            st.error(f"Could not read uploaded files: {e}")
+            return
+
+    # 2. If no uploads, try blueprint
+    elif bpm and bpm.has_file("samples_meta.json"):
+        meta = bpm.load_json("samples_meta.json")
+        if meta and bpm.has_file(meta.get("s1")) and bpm.has_file(meta.get("s2")):
+            s1_name = meta["s1"]
+            s2_name = meta["s2"]
+            sample1_bytes = bpm.load_bytes(s1_name)
+            sample2_bytes = bpm.load_bytes(s2_name)
+            st.info(f"Loaded samples from Blueprint '{bpm.name}': {s1_name}, {s2_name}")
+        else:
+            st.warning(f"Blueprint '{bpm.name}' found but samples are missing.")
+
+    if not sample1_bytes or not sample2_bytes:
+        st.error("Upload both sample documents (or provide a valid Blueprint with saved samples).")
         return
     
-
-    s1 = file_to_text(sample1_bytes, sample1.name or "")
-    s2 = file_to_text(sample2_bytes, sample2.name or "")
+    s1 = file_to_text(sample1_bytes, s1_name)
+    s2 = file_to_text(sample2_bytes, s2_name)
+    
+    # Debug save locally (legacy behavior, can be removed if strictly using blueprints)
     with open("sample1.txt", "wb") as f:
         f.write(str(s1).encode("utf-8"))
-
-    category_of_document = CategoryIdentifier(llm_client=llm_client).identify_category(s1, s2)
-    
-    with open("category_of_document.txt", "wb") as f:
-        f.write(str(category_of_document).encode("utf-8"))
 
     if not (s1 or s2):
         st.error("Both documents are empty. Upload non-empty .txt or .docx files.")
@@ -163,12 +196,40 @@ def run_pipeline():
     assembler = Assembler()
 
     # =====================================================
+    # STEP 0 — Category Identification
+    # =====================================================
+    category_of_document = None
+    if bpm:
+        category_of_document = bpm.load_text("category.txt")
+    
+    if not category_of_document:
+        category_of_document = CategoryIdentifier(llm_client=llm_client).identify_category(s1, s2)
+        if bpm:
+            bpm.save_text("category.txt", category_of_document)
+    else:
+        st.caption("Loaded Category from Blueprint.")
+
+    with open("category_of_document.txt", "wb") as f:
+        f.write(str(category_of_document).encode("utf-8"))
+
+    # =====================================================
     # STEP 1 — Section identification (fade-in, slow)
     # =====================================================
     st.subheader("Step 1 · Identifying document sections")
 
-    blueprint = sectioner.divide_into_sections(s1, s2, category_of_document)
-    sections = blueprint["sections"]
+    sections = None
+    if bpm:
+        sections = bpm.load_json("sections.json")
+
+    if not sections:
+        blueprint_data = sectioner.divide_into_sections(s1, s2, category_of_document)
+        sections = blueprint_data["sections"]
+        if bpm:
+            bpm.save_json("sections.json", sections)
+    else:
+        st.success("Loaded Sections from Blueprint.")
+    
+    blueprint = {"sections": sections} # ensure blueprint dict structure
 
     sec_container = st.container()
 
@@ -183,7 +244,7 @@ def run_pipeline():
                 """,
                 unsafe_allow_html=True
             )
-        time.sleep(0.9)
+        time.sleep(0.1) # Faster if loaded
 
     st.success(f"{len(sections)} sections identified.")
 
@@ -192,33 +253,51 @@ def run_pipeline():
     # =====================================================
     st.subheader("Step 2 · Analyzing sample documents")
 
-    step2_status = st.empty()
-    step2_status.markdown("**Extracting content from both documents…**")
+    extracted = None
+    prompts = None
+    
+    if bpm:
+        extracted = bpm.load_json("extracted.json")
+        prompts = bpm.load_json("prompts.json")
 
-    extracted = extractor.extract_sections_from_docs(s1, s2, sections)
+    # If missing or mismatch, re-run
+    if not extracted or not prompts or len(extracted) != len(sections) or len(prompts) != len(sections):
+        if bpm and (extracted or prompts):
+            st.warning("Blueprint analysis incomplete or mismatched. Re-running Step 2...")
+            
+        step2_status = st.empty()
+        step2_status.markdown("**Extracting content from both documents…**")
+        step2_details = st.empty()
+        def write_step2_details(details: str):
+            step2_details.markdown(details)
+        extracted = extractor.extract_sections_from_docs(s1, s2, sections, category_of_document, write_step2_details)
 
-    prompts = []
-    for i, sec in enumerate(sections):
-        sec_name = sec["name"]
-        step2_status.markdown(f"**{sec_name}** — extracted text")
-        time.sleep(0.3)
+        prompts = []
+        for i, sec in enumerate(sections):
+            sec_name = sec["name"]
+            step2_status.markdown(f"**{sec_name}** — extracted text")
+            time.sleep(0.1)
 
-        p = section_prompt_generator.generate_prompt_and_fields(
-            sec_name,
-            sec.get("purpose", ""),
-            extracted[i] if i < len(extracted) else "",
-            category_of_document
-        )
-        prompts.append(p)
-        step2_status.markdown(f"**{sec_name}** — prompt generated")
-        time.sleep(0.2)
-    generated_prompts_file = "generated_prompts.json"
-    with open(generated_prompts_file, "wb") as f:
-        f.write(json.dumps(prompts).encode("utf-8"))
+            p = section_prompt_generator.generate_prompt_and_fields(
+                sec_name,
+                sec.get("purpose", ""),
+                extracted[i] if i < len(extracted) else "",
+                category_of_document
+            )
+            prompts.append(p)
+            step2_status.markdown(f"**{sec_name}** — prompt generated")
+            time.sleep(0.1)
+        
+        step2_status.markdown("**All sections done.**")
+        time.sleep(0.4)
+        step2_status.empty()
+        
+        if bpm:
+            bpm.save_json("extracted.json", extracted)
+            bpm.save_json("prompts.json", prompts)
+    else:
+        st.success("Loaded Analysis (Extraction & Prompts) from Blueprint.")
 
-    step2_status.markdown("**All sections done.**")
-    time.sleep(0.4)
-    step2_status.empty()
 
     st.success("Extraction and prompts ready.")
 
@@ -288,9 +367,20 @@ def run_pipeline():
         # Case 2: CURL Command (Legacy Chat API)
         st.subheader("Step 3: Fetching data via API")
         if all_required:
-            print("all_required",all_required)
-            with st.status("Generating questions for each field...", state="running"):
-                field_to_question = question_generator.generate_questions_for_fields(all_required,category_of_document)
+            
+            # Try load questions from blueprint
+            field_to_question = None
+            if bpm:
+                field_to_question = bpm.load_json("generated_questions.json")
+
+            if not field_to_question:
+                with st.status("Generating questions for each field...", state="running"):
+                    field_to_question = question_generator.generate_questions_for_fields(all_required,category_of_document)
+                if bpm:
+                    bpm.save_json("generated_questions.json", field_to_question)
+            else:
+                st.caption("Loaded Questions from Blueprint.")
+
             generated_questions_file = "generated_questions.json"
             with open(generated_questions_file, "wb") as f:
                 f.write(json.dumps(field_to_question).encode("utf-8"))
@@ -435,7 +525,8 @@ def run_pipeline():
     formatting_error = None
 
     # Use sample 1 as formatting template when it is a DOCX (run in subprocess so formatting's "utils" package is used)
-    if sample1 and sample1.name and sample1.name.lower().endswith(".docx") and sample1_bytes:
+    # Check filename using s1_name
+    if s1_name and s1_name.lower().endswith(".docx") and sample1_bytes:
         with st.status("Applying template formatting (styles & structure from Sample 1)…", state="running"):
             _formatting_dir = _root / "formatting"
             try:
