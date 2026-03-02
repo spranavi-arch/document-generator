@@ -1,9 +1,6 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-import logging
-logging.basicConfig(level=logging.INFO)
-
 import os
 import re
 import streamlit as st
@@ -12,7 +9,7 @@ from utils.style_extractor import load_document_blueprint
 from utils.html_to_docx import html_to_docx_bytes, plain_text_to_simple_html, simple_html_to_plain_text
 from utils.docx_to_html import docx_to_html
 
-# st.set_page_config(layout="wide")
+st.set_page_config(layout="wide")
 
 # Base URL of the Flask app (CKEditor). Set CKEDITOR_FLASK_URL in .env if Flask runs elsewhere.
 CKEDITOR_FLASK_URL = os.environ.get("CKEDITOR_FLASK_URL", "http://127.0.0.1:5000")
@@ -154,7 +151,7 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
 
     # Single editor: Quill if available, else Lexical, else plain text
     if HAS_QUILL:
-        _col, _cap = st.columns([1, 10])
+        _col, _cap = st.columns([1, 20])
         with _col:
             if st.button("Add space", key="add_space_quill", help="Append a blank paragraph."):
                 current = st.session_state.get("formatted_editor_html") or initial_html
@@ -180,7 +177,7 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
             st.session_state["formatted_editor_html"] = editor_content
         editor_html = st.session_state.get("formatted_editor_html") or initial_html
     elif HAS_LEXICAL:
-        _col, _cap = st.columns([1, 10])
+        _col, _cap = st.columns([1, 20])
         with _col:
             if st.button("Add space", key="add_space_lexical", help="Append a blank paragraph."):
                 current = st.session_state.get("formatted_editor_html") or initial_html
@@ -203,7 +200,7 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
             st.session_state["formatted_editor_html"] = _markdown_to_html(md_content)
         editor_html = st.session_state.get("formatted_editor_html") or _markdown_to_html(initial_value)
     else:
-        _col, _cap = st.columns([1, 10])
+        _col, _cap = st.columns([1, 20])
         with _col:
             if st.button("Add space", key="add_space_plain", help="Append a blank paragraph."):
                 current = st.session_state.get("formatted_editor_html") or initial_html

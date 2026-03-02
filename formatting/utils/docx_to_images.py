@@ -12,6 +12,7 @@ Optional: Tesseract OCR can be run on each page image to extract text for image-
 
 import base64
 import io
+import logging
 import os
 import shutil
 import subprocess
@@ -36,7 +37,8 @@ def _find_libreoffice() -> str | None:
 
 
 def _docx_to_pdf(docx_path: str) -> str | None:
-    """Convert DOCX to PDF using LibreOffice. Returns path to PDF or None."""
+    """Convert DOCX to PDF using LibreOffice. Returns path to PDF or None.
+    Caller must delete the returned PDF and its directory when done (docx_to_page_images does this)."""
     lo = _find_libreoffice()
     if not lo:
         return None
@@ -60,16 +62,21 @@ def _docx_to_pdf(docx_path: str) -> str | None:
         pdf_path = os.path.join(out_dir, base + ".pdf")
         if os.path.isfile(pdf_path):
             return pdf_path
-        return None
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    finally:
         try:
             for f in os.listdir(out_dir):
                 os.unlink(os.path.join(out_dir, f))
             os.rmdir(out_dir)
         except OSError:
             pass
+        return None
+    except (subprocess.TimeoutExpired, OSError):
+        try:
+            for f in os.listdir(out_dir):
+                os.unlink(os.path.join(out_dir, f))
+            os.rmdir(out_dir)
+        except OSError:
+            pass
+        return None
 
 
 def _pdf_to_page_images_fitz(pdf_path: str, dpi: int, max_pages: int) -> list[bytes]:
@@ -120,11 +127,17 @@ def docx_to_page_images(docx_path: str, dpi: int = 150, max_pages: int = 15) -> 
     Returns list of PNG bytes; empty list if conversion fails (e.g. LibreOffice not installed).
     """
     pdf_path = _docx_to_pdf(docx_path)
+    if pdf_path is None:
+        logging.info("docx_to_page_images: DOCX→PDF failed or LibreOffice not found (pdf_path is None)")
+    else:
+        logging.info("docx_to_page_images: DOCX→PDF succeeded, pdf_path=%s", pdf_path)
     if not pdf_path:
         return []
     out_images = _pdf_to_page_images_fitz(pdf_path, dpi, max_pages)
+    logging.info("docx_to_page_images: PyMuPDF (fitz) returned %s page(s)", len(out_images))
     if not out_images:
         out_images = _pdf_to_page_images_pdf2image(pdf_path, dpi, max_pages)
+        logging.info("docx_to_page_images: pdf2image fallback returned %s page(s)", len(out_images))
     pdf_dir = os.path.dirname(pdf_path)
     docx_dir = os.path.dirname(os.path.abspath(docx_path))
     if pdf_dir != docx_dir:

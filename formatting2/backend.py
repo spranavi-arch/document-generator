@@ -1,6 +1,5 @@
 import base64
 import json
-import logging
 import os
 import tempfile
 
@@ -176,12 +175,9 @@ def process_document(generated_text, template_file):
         page_bytes = docx_to_page_images(single_column_path, dpi=150, max_pages=15)
         if page_bytes:
             schema["template_page_images"] = [base64.b64encode(b).decode("ascii") for b in page_bytes]
-            logging.info("Template page images: %s pages", len(schema["template_page_images"]))
             template_page_ocr_texts = ocr_page_images(page_bytes)
             if template_page_ocr_texts and any(t.strip() for t in template_page_ocr_texts):
                 schema["template_page_ocr_texts"] = template_page_ocr_texts
-        else:
-            logging.info("Template page images: none (conversion failed or no LibreOffice)")
         for path in (single_column_path, template_path):
             if path and os.path.isfile(path):
                 try:
@@ -189,12 +185,10 @@ def process_document(generated_text, template_file):
                 except OSError:
                     pass
     except Exception:
-        logging.info("Template page images: none (conversion failed or no LibreOffice)")
+        pass
 
     blocks = []
     try:
-        num_images = len(schema.get("template_page_images") or [])
-        logging.info("Sending to LLM: template_page_images=%s pages", num_images)
         blocks = format_text_with_llm(
             generated_text,
             schema,

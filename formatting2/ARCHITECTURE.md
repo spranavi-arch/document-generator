@@ -33,13 +33,6 @@ Template DOCX → Style + structure extraction → Structure blueprint
 
 ---
 
-## Multi-agent slot-fill (optional)
-
-- Set `FORMATTER_MULTI_AGENT=1` (or `true`/`yes`) to use one LLM call per **section** (caption, body, attorney_signature, etc.), run in parallel, then merge.
-- Sections come from `template_structure` (contiguous runs of same `section_type`). Each agent gets full raw text + only its block range and a section-specific system prompt.
-- Parallelism is capped by `FORMATTER_MULTI_AGENT_MAX_WORKERS` (default 5, max 10). Sections that are only line/signature_line/section_underline skip the API and return empty strings.
-- Output is merged in section order and passed to `inject_blocks()` unchanged; layout and in-place fill behave the same.
-
 ## TODO (future)
 
 ### Real numbering cloning (Upgrade 2 full)
