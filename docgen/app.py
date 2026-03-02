@@ -58,6 +58,7 @@ from docgen.agents.data_retrieval.field_fetcher import FieldFetcher, _default_qu
 from docgen.agents.data_retrieval.question_generator import QuestionGenerator
 from docgen.agents.drafting.section_generator import SectionGenerator
 from docgen.agents.drafting.assembler import Assembler
+from docgen.agents.review.reviewer import DocumentReviewer
 from docgen.agents.category_identification.category_identifier import CategoryIdentifier
 from docgen.core.llm_client import LLMClient
 from docgen.core.blueprint_manager import BlueprintManager
@@ -194,6 +195,7 @@ def run_pipeline():
     
     section_generator = SectionGenerator(llm_client=llm_client)
     assembler = Assembler()
+    reviewer = DocumentReviewer(llm_client=llm_client)
 
     # =====================================================
     # STEP 0 — Category Identification
@@ -346,22 +348,70 @@ def run_pipeline():
             def on_doc_progress(doc_name: str, index: int, total: int):
                 status_placeholder.markdown(f"**Scanning document {index}/{total}:** `{doc_name}`")
                 progress.progress(index / total, text=f"Scanning: {doc_name} ({index}/{total})")
-            
-            # Fetch using the new search strategy
-            field_values = field_fetcher.fetch_fields_from_case_search(
-                case_id=curl_input_clean,
-                firm_id=firm_id_input,
-                required_fields=all_required,
-                on_doc_start=on_doc_progress
-            )
-            
-            status_placeholder.markdown(f"**Done.** Found {len(field_values)} of {len(all_required)} fields.")
-            progress.progress(1.0, text="Done.")
-            
-        with st.expander("Field → value (from Search)", expanded=True):
-             for f, v in field_values.items():
-                vstr = str(v)
-                st.markdown(f"**{f}** → {vstr[:200] + '...' if len(vstr) > 200 else vstr}")
+        
+        # --- Capture detailed results (confidence) via callback ---
+        field_details = {}
+        def on_field_found_callback(field, value, confidence):
+            field_details[field] = {"value": value, "confidence": confidence}
+
+        # Fetch using the new search strategy
+        field_values = field_fetcher.fetch_fields_from_case_search(
+            case_id=curl_input_clean,
+            firm_id=firm_id_input,
+            required_fields=all_required,
+            on_doc_start=on_doc_progress,
+            on_field_found=on_field_found_callback
+        )
+        
+        status_placeholder.markdown(f"**Done.** Found {len(field_values)} of {len(all_required)} fields.")
+        progress.progress(1.0, text="Done.")
+
+        # --- Group fields by confidence ---
+        high_conf = []
+        low_conf = []
+        unrecognized = []
+        
+        for f in all_required:
+            if f in field_details:
+                conf = field_details[f]["confidence"]
+                val = field_details[f]["value"]
+                if conf == "HIGH":
+                    high_conf.append((f, val))
+                else:
+                    low_conf.append((f, val))
+            elif f not in field_values:
+                 # If it wasn't captured in callback AND not in final result dict
+                 unrecognized.append(f)
+            else:
+                 # In result dict but missed callback? Treat as low confidence fallback
+                 low_conf.append((f, field_values[f]))
+
+        # --- Display in Expanders ---
+        st.markdown("### Extraction Results")
+        
+        with st.expander(f"High Confidence ({len(high_conf)})", expanded=True):
+            if high_conf:
+                for f, v in high_conf:
+                    vstr = str(v)
+                    st.markdown(f"**{f}**: {vstr[:100]}...")
+            else:
+                st.caption("No high confidence matches.")
+
+        with st.expander(f"Low Confidence / Ambiguous ({len(low_conf)})", expanded=False):
+            if low_conf:
+                for f, v in low_conf:
+                    vstr = str(v)
+                    st.markdown(f"**{f}**: {vstr[:100]}...")
+            else:
+                st.caption("No low confidence matches.")
+
+        with st.expander(f"Unrecognized Fields ({len(unrecognized)})", expanded=False):
+            if unrecognized:
+                for f in unrecognized:
+                    st.markdown(f"- {f}")
+            else:
+                st.caption("All fields found!")
+
 
     elif curl_input_clean:
         # Case 2: CURL Command (Legacy Chat API)
@@ -516,16 +566,30 @@ def run_pipeline():
     )
 
     # =====================================================
-    # STEP 5 — Formatting + final editor
+    # STEP 5 — Review, Polishing and formatting
     # =====================================================
-    st.subheader("Step 5 · Polishing and formatting the document")
+    st.subheader("Step 5 · Reviewing, Polishing and formatting the document")
 
-    final_draft = assembler.assemble(blueprint, draft_sections)
+    # 1. Assemble
+    initial_draft = assembler.assemble(blueprint, draft_sections)
+    
+    # 2. Review
+    final_draft = initial_draft
+    with st.spinner("Reviewing draft for consistency and flow..."):
+        try:
+            reviewed_draft = reviewer.review_draft(initial_draft, field_values, category_of_document)
+            if reviewed_draft and len(reviewed_draft) > 100:
+                final_draft = reviewed_draft
+                st.success("Draft reviewed and polished.")
+            else:
+                st.warning("Reviewer returned empty or too short text. Using initial draft.")
+        except Exception as e:
+            st.error(f"Review step failed: {e}. Using initial draft.")
+
     formatted_docx_bytes = None
     formatting_error = None
 
     # Use sample 1 as formatting template when it is a DOCX (run in subprocess so formatting's "utils" package is used)
-    # Check filename using s1_name
     if s1_name and s1_name.lower().endswith(".docx") and sample1_bytes:
         with st.status("Applying template formatting (styles & structure from Sample 1)…", state="running"):
             _formatting_dir = _root / "formatting"
@@ -577,6 +641,45 @@ print(out_path)
                 formatting_error = str(_e)
         if formatting_error:
             st.warning(f"Formatting pipeline failed (using plain draft): {formatting_error}")
+
+    # --- Save output to generated_documents folder ---
+    try:
+        # Determine folder structure: generated_documents/{firm_id}/{case_id}/
+        
+        # Determine Case ID
+        save_case_id = "unknown_case"
+        if is_case_id:
+            save_case_id = str(curl_input_clean)
+        elif curl_input_clean:
+            # Try to extract c_matter_id from curl payload if possible
+            # Simple regex search for c_matter_id in the curl string
+            import re
+            m = re.search(r'c_matter_id["\']?\s*[:=]\s*["\']?(\d+)', curl_input_clean)
+            if m:
+                save_case_id = m.group(1)
+            else:
+                # Fallback: simple hash or timestamp if no ID found
+                save_case_id = f"custom_curl_{int(time.time())}"
+        
+        save_firm_id = str(firm_id_input) if firm_id_input else "default_firm"
+        
+        output_dir = _root / "generated_documents" / save_firm_id / save_case_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        doc_name = f"generated_draft_{timestamp}.docx"
+        output_path = output_dir / doc_name
+        
+        # Save the bytes
+        final_bytes = formatted_docx_bytes if formatted_docx_bytes else text_to_docx_bytes(final_draft)
+        
+        with open(output_path, "wb") as f:
+            f.write(final_bytes)
+            
+        st.success(f"Document saved to: `{output_path}`")
+        
+    except Exception as e:
+        st.error(f"Failed to save document to folder: {e}")
 
     st.subheader("Formatted document")
 

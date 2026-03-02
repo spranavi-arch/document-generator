@@ -638,6 +638,7 @@ Example:
         required_fields: list[str],
         firm_id: str | int = 1,
         on_doc_start: Callable[[str, int, int], None] | None = None,
+        on_field_found: Callable[[str, str, str], None] | None = None, # field, value, confidence
     ) -> dict[str, Any]:
         """
         Fetch field values by searching documents in Azure Search for the given case_id.
@@ -702,6 +703,9 @@ Example:
                         
                         found_in_chunk += 1
                         print(f"[FieldFetcher]       + Found '{field}': '{val}' (Confidence: {conf})")
+                        
+                        if on_field_found:
+                             on_field_found(field, val, conf)
 
                         if conf == "HIGH":
                             found_values[field] = val
@@ -886,10 +890,12 @@ def fetch_fields_from_case_search(
     required_fields: list[str],
     firm_id: str | int = 1,
     on_doc_start: Callable[[str, int, int], None] | None = None,
+    on_field_found: Callable[[str, str, str], None] | None = None,
 ) -> dict[str, Any]:
     return FieldFetcher().fetch_fields_from_case_search(
         case_id=case_id, 
         required_fields=required_fields, 
         firm_id=firm_id, 
-        on_doc_start=on_doc_start
+        on_doc_start=on_doc_start,
+        on_field_found=on_field_found
     )
