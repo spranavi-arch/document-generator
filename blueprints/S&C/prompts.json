@@ -1,0 +1,122 @@
+[
+  {
+    "prompt": "This section is the Summons Caption. It contains exactly: the court name, the county name, the top separator line ending in 'X', the Plaintiff's name, placeholders for 'Index No.:' and 'Date Filed:', the word 'Plaintiff,' the '-against-' separator, the Defendant's name, the word 'Defendant.', and the bottom separator line ending in 'X'. Do NOT include the body of the Summons (notice to defendant, response deadlines, basis of venue, attorney contact info) or any subsequent sections. All variable facts must come from the provided Field data. If a field is missing, output [field_name]. Do not invent facts. Output ONLY the actual document text for this section. Maintain the traditional legal caption layout, using spacing to align 'Index No.:' and 'Date Filed:' to the right of the Plaintiff's name. Stop immediately after the bottom '-----------------------------------------------------------------------X' line.",
+    "required_fields": [
+      "court_name",
+      "county_name",
+      "plaintiff_name",
+      "defendant_name",
+      "index_number",
+      "date_filed"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the \"Summons Notice\" section of a Summons and Verified Complaint.\n\nDEFINE SECTION SCOPE EXPLICITLY:\nThis section is the Summons Notice. It contains exactly:\n1. The capitalized greeting \"TO THE ABOVE NAMED DEFENDANT:\"\n2. The standard statutory paragraph summoning the defendant to answer the complaint or serve a notice of appearance within twenty days (if served personally within the state) or 30 days (if served otherwise), and warning that failure to appear or answer will result in a default judgment for the relief demanded.\n3. A statement declaring the basis of venue, formatted exactly as \"The basis of venue is [basis_of_venue]: [basis_of_venue_address].\"\n\nDo NOT include the Court and Venue Header, Case Caption, Date, Attorney Contact Info, or the Complaint Heading. Stop immediately after the basis of venue sentence.\n\nDATA FROM FIELD DATA ONLY:\nAll variable facts come from Field data. Missing \u2192 [field_name]. No invented facts.\n- Basis of Venue: [basis_of_venue] (e.g., Plaintiff\u2019s Residence)\n- Basis of Venue Address: [basis_of_venue_address] (e.g., 8728 Flatbush Avenue, in Brooklyn, Kings County, New York)\n\nOUTPUT:\nOnly the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE:\nContinuous formal legal prose; no bullets or markdown. Maintain the exact statutory language for the 20/30 day response deadline and default warning as standard in New York practice.\n\nONE SECTION ONLY:\nOutput ONLY the content for this section and stop before the next section's heading or content (such as the date or attorney signature block).",
+    "required_fields": [
+      "basis_of_venue",
+      "basis_of_venue_address"
+    ]
+  },
+  {
+    "prompt": "You are generating the 'Summons Signature Block and Defendant Address' section of a legal document. \n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Summons Signature Block and Defendant Address. It contains exactly: the date and location of the summons execution, the plaintiff's attorney's signature line and contact block, and the 'TO:' block specifying the defendant's name and address for service. Do NOT include the preceding summons notice text, the basis of venue, or the subsequent Complaint Heading.\n\n2. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided Field data. If a field is missing, output exactly the bracketed field name (e.g., [defendant_name]). Do not invent any names, dates, addresses, or phone numbers.\n\n3. OUTPUT: Provide only the actual document text for this section. No summaries, no meta-commentary, and no introductory remarks.\n\n4. LEGAL PROSE: Maintain the exact formatting, spacing, and capitalization style of standard New York legal summons signature blocks. Do not use markdown formatting like bolding or bullet points unless strictly necessary for legal formatting.\n\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately before the Complaint Heading.\n\nFormat the output exactly as follows:\n\nDated:\t[summons_date_city]\n\t[summons_date_month]____, [summons_date_year]\n\t\t\t\t\t\n\n____________________________\n[plaintiffs_attorney_name]\n[plaintiffs_law_firm_name]\nAttorneys for Plaintiff\n[plaintiffs_law_firm_address]\n[plaintiffs_law_firm_phone]\n\n\n\n\nTO:\n\n[defendant_name]\n[defendant_address]",
+    "required_fields": [
+      "summons_date_city",
+      "summons_date_month",
+      "summons_date_year",
+      "plaintiffs_attorney_name",
+      "plaintiffs_law_firm_name",
+      "plaintiffs_law_firm_address",
+      "plaintiffs_law_firm_phone",
+      "defendant_name",
+      "defendant_address"
+    ]
+  },
+  {
+    "prompt": "You are an AI legal assistant generating a specific section of a legal document. This section is the 'Complaint Caption'. It contains exactly: the court name, the county, the case index number, the date filed, and the names of the Plaintiff and Defendant formatted in a traditional New York legal caption box. Do NOT include the Summons, the introductory paragraph of the Complaint, the numbered allegations, or any content that belongs to the previous or next sections. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided field data. If a value is missing, output exactly [field_name]. Do not invent facts. OUTPUT: Generate only the actual document text for this section. No summaries, no meta-commentary. Use formal legal formatting, specifically recreating the caption box using dashes and 'X' (e.g., '-----------------------------------------------------------------------X'). Format the top with the court name and county. Place the Plaintiff's name above '-against-' and the Defendant's name below it, with 'Index No.: [index_number]' and 'Date Filed: [date_filed]' aligned to the right of the Plaintiff's name.",
+    "required_fields": [
+      "court_name",
+      "county_name",
+      "plaintiff_name",
+      "defendant_name",
+      "index_number",
+      "date_filed"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Complaint Introduction' section of a Summons and Verified Complaint.\n\nSCOPE: This section is the Complaint Introduction. It contains exactly: a single introductory sentence stating that the plaintiff appears by their attorneys, names the specific law firm representing them, and declares that the cause of action is alleged upon information and belief. Do NOT include the case caption, the summons, the court heading, or the numbered allegations/causes of action that follow this section.\n\nDATA: All variable facts must come from the provided Field data. Missing \u2192 [field_name]. No invented facts.\n- Plaintiff's possessive pronoun (e.g., his, her, their, its): [plaintiff_possessive_pronoun]\n- Plaintiff's attorney firm name: [plaintiffs_attorney_firm_name]\n\nOUTPUT: Output ONLY the actual document text for this section. No summaries, no meta-commentary, no markdown formatting, and no bullet points. Document text only. Use continuous formal legal prose matching the standard phrasing (e.g., 'Plaintiff by [pronoun] attorneys, [Firm Name], as and for a cause of action alleges, upon information and belief, as follows:'). Stop immediately after this introductory sentence.",
+    "required_fields": [
+      "plaintiff_possessive_pronoun",
+      "plaintiffs_attorney_firm_name"
+    ]
+  },
+  {
+    "prompt": "You are an AI legal assistant drafting a specific section of a Summons and Verified Complaint.\n\nSCOPE:\nThis section is the 'Cause of Action: Negligence'. It contains exactly: the heading 'AS AND FOR A FIRST CAUSE OF ACTION:\nNEGLIGENCE', followed by formal pleading paragraphs detailing: plaintiff and defendant residencies; defendant's ownership, registration, operation, control, maintenance, inspection, supervision, repair, management, and leasing status of their vehicle; plaintiff's status or vehicle description; the date and location of the accident; the fact of the collision; resulting injuries; specific allegations of defendant's negligence (speeding, failure to brake, failure to observe signals, etc.); absence of plaintiff's comparative negligence; statutory exceptions under CPLR 1601 and 1602 (joint and several liability, non-delegable duty, vicarious liability, intentional conduct, reckless disregard, acting in concert); serious injury threshold under NY Insurance Law \u00a75102(d); medical expenses; loss of occupation; and a statement that damages exceed lower court jurisdictional limits. Do NOT include the case caption, summons, prayer for relief, or attorney verification.\n\nDATA:\nUse the provided field data only. Do not invent facts. If a field is missing, output the exact placeholder [field_name].\n\nFORMAT & STYLE:\nOutput ONLY the actual document text for this section. Use continuous formal legal prose. Maintain the repetitive pleading style typical of New York personal injury complaints (e.g., starting paragraphs with 'That on [accident_date], and at all times herein mentioned...'). Stop generating immediately after the paragraph stating damages exceed the jurisdictional limits of all lower courts.",
+    "required_fields": [
+      "plaintiff_name",
+      "plaintiff_residence_county",
+      "plaintiff_residence_state",
+      "accident_date",
+      "defendant_name",
+      "defendant_residence_county",
+      "defendant_residence_state",
+      "defendant_vehicle_year",
+      "defendant_vehicle_make",
+      "defendant_vehicle_plate_state",
+      "defendant_vehicle_license_plate",
+      "accident_county",
+      "accident_city",
+      "accident_state",
+      "plaintiff_status_or_vehicle_description",
+      "accident_location_description"
+    ]
+  },
+  {
+    "prompt": "This section is the Complaint Signature Block. It contains exactly: the date and location of the complaint signing, the closing 'Yours, etc.;', a signature line, and the plaintiff's attorney's signature block including name, firm name, role ('Attorneys for Plaintiff'), address, and phone number. Do NOT include the Prayer for Relief (previous section) or the Attorney's Verification (next section).\n\nDATA FROM FIELD DATA ONLY: All variable facts come from Field data. Missing \u2192 [field_name]. No invented facts.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Continuous formal legal prose; no bullets or markdown. Ensure the layout matches the standard legal signature block format.\n\nFormat the output exactly as follows:\nDated:\t[complaint_date_location]\n\t[complaint_date_month]_____, [complaint_date_year]\n\n\n\nYours, etc.;\n\n\n____________________________\n[plaintiffs_attorney_name]\n[plaintiffs_law_firm_name]\nAttorneys for Plaintiff\n[plaintiffs_law_firm_address]\n[plaintiffs_law_firm_phone]",
+    "required_fields": [
+      "complaint_date_location",
+      "complaint_date_month",
+      "complaint_date_year",
+      "plaintiffs_attorney_name",
+      "plaintiffs_law_firm_name",
+      "plaintiffs_law_firm_address",
+      "plaintiffs_law_firm_phone"
+    ]
+  },
+  {
+    "prompt": "This section is the Attorney's Verification. It contains exactly: the 'ATTORNEY'S VERIFICATION' heading, the attorney's sworn statement affirming the truth of the complaint under penalties of perjury, the explanation of why the attorney is verifying instead of the plaintiff, the date block, and the signature line. Do NOT include the Litigation Back/Blueback, the Prayer for Relief, or any other sections.\n\nAll variable facts must come from the provided Field data. If a field is missing, output exactly [field_name]. Do not invent facts.\n\nOutput ONLY the actual document text for this section. No summaries, no meta-commentary. Maintain continuous formal legal prose.\n\nDraft the section using the following structure and exact wording:\n\nATTORNEY'S VERIFICATION\n\n[plaintiffs_attorney_name], an attorney duly admitted to practice before the Courts of the State of New York, affirms the following to be true under the penalties of perjury:\n\nI am an attorney at [plaintiffs_law_firm_name], attorneys of record for Plaintiff, [plaintiff_name]. I have read the annexed\n\nSUMMONS AND VERIFIED COMPLAINT\n\nand know the contents thereof, and the same are true to my knowledge, except those matters therein which are stated to be alleged upon information and belief, and as to those matters I believe them to be true. My belief, as to those matters therein not stated upon knowledge, is based upon facts, records, and other pertinent information contained in my files.\n\nThe reason this verification is made by me and not Plaintiff is that Plaintiff is not presently in the county wherein the attorneys for the plaintiff maintain their offices.\n\nDATED: [verification_city_state]\n       [verification_month]_____, [verification_year]\n\n\n__________________________________\n[plaintiffs_attorney_name], ESQ.",
+    "required_fields": [
+      "plaintiffs_attorney_name",
+      "plaintiffs_law_firm_name",
+      "plaintiff_name",
+      "verification_city_state",
+      "verification_month",
+      "verification_year"
+    ]
+  },
+  {
+    "prompt": "You are generating the 'Litigation Back Title and Attorney Info' section of a legal document. This section contains exactly: a line of equal signs, the document title (e.g., SUMMONS AND VERIFIED COMPLAINT), another line of equal signs, the plaintiff's law firm name, their designation ('Attorneys for Plaintiff'), their full address, their phone number, and a final line of equal signs. Do NOT include the attorney's verification, the certification of non-frivolous content, or any blanks for service admission/notice of entry. DATA FROM FIELD DATA ONLY: All variable facts (law firm name, address, phone) come from Field data. Missing \u2192 [field_name]. No invented facts. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only. Maintain the exact layout with the equal signs (`====================================================================`) as shown in standard litigation backs.",
+    "required_fields": [
+      "document_title",
+      "plaintiffs_law_firm_name",
+      "plaintiffs_law_firm_address_line_1",
+      "plaintiffs_law_firm_address_line_2",
+      "plaintiffs_law_firm_phone"
+    ]
+  },
+  {
+    "prompt": "You are an AI legal assistant generating the 'Certification' section of a legal document. This section is the Certification. It contains exactly: the standard certification statement pursuant to 22 NYCRR 130-1.1(c) stating that the contentions in the pleadings are not frivolous, followed by the attorney's signature and printed name. Do NOT include the attorney verification, litigation back details, or any content belonging to the previous or next sections. All variable facts must come from Field data. Missing -> [field_name]. No invented facts. Output ONLY the actual document text for this section. No summaries, no meta-commentary. Use continuous formal legal prose; no bullets or markdown. Output ONLY the content for this section and stop immediately after the attorney's printed name. The text should read exactly: 'I certify pursuant to 22 NYCRR 130-1.1(c) that the contentions contained in the within pleadings are not frivolous.' followed by the [plaintiffs_attorney_name] in title case, and then [plaintiffs_attorney_name] in uppercase followed by ', ESQ.'.",
+    "required_fields": [
+      "plaintiffs_attorney_name"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Admission of Service' section for a legal document.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Admission of Service. It contains exactly: the boilerplate acknowledgment of service ('Service of a copy of the within...'), a blank line for the date and signature, and a prompt for the attorney's client ('Attorney(s) for'). Do NOT include the litigation back, attorney certification, or any other content from previous or subsequent sections.\n2. DATA FROM FIELD DATA ONLY: This section contains no variable facts. It is a static form block meant to be filled out by hand upon receipt. Do not invent any names or dates.\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n4. LEGAL PROSE: Reproduce the exact text and spacing as follows:\nService of a copy of the within                                                          is hereby admitted.\nDated,     \t\t________________________________\nAttorney(s) for\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop.",
+    "required_fields": []
+  },
+  {
+    "prompt": "Generate the 'Notice of Entry and Settlement' section of a litigation back. Scope: This section contains exactly the 'PLEASE TAKE NOTICE' heading, 'NOTICE OF ENTRY' text with blanks for the entry date, 'NOTICE OF SETTLEMENT' text with blanks for the judge, court, date, and time, a 'Dated' blank line, 'Yours, etc.', and the law firm name. Do NOT include the preceding attorney certification or verification sections. Data: Insert [law_firm_name] at the bottom. Retain all standard blank lines (e.g., '____ 202__') exactly as they appear for manual completion. Do not invent facts. Output: Provide only the exact document text. No summaries, formatting markdown, or meta-commentary.",
+    "required_fields": [
+      "law_firm_name"
+    ]
+  }
+]

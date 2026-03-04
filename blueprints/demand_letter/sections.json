@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "name": "Header",
+    "purpose": "The top section of the document containing the date, delivery method, recipient insurance company name and address, and the attention line or adjuster name."
+  },
+  {
+    "id": 2,
+    "name": "Reference Block",
+    "purpose": "Case reference details including Plaintiff vs. Defendant names, claim number, policy number, and law firm file number."
+  },
+  {
+    "id": 3,
+    "name": "Salutation",
+    "purpose": "The formal greeting to the recipient, such as 'To Whom It May Concern:' or addressing a specific adjuster."
+  },
+  {
+    "id": 4,
+    "name": "Opening Demand Statement",
+    "purpose": "The initial paragraph stating the specific monetary demand or request for policy limits, the deadline for a response, and the offer to release the claim."
+  },
+  {
+    "id": 5,
+    "name": "Bad Faith and Legal Notice",
+    "purpose": "A paragraph reminding the insurer of their legal obligation to notify the insured of the demand, often citing relevant case law to establish potential bad faith liability."
+  },
+  {
+    "id": 6,
+    "name": "Liability",
+    "purpose": "A summary of the accident circumstances, establishing the defendant's fault and liability for the plaintiff's injuries."
+  },
+  {
+    "id": 7,
+    "name": "Damages and Medical Summary",
+    "purpose": "An exhaustive breakdown of the plaintiff's injuries, including MRI findings, surgical procedures, injections, chiropractic treatments, range of motion (ROM) deficits, and neurological findings."
+  },
+  {
+    "id": 8,
+    "name": "Conclusion and Bad Faith Warning",
+    "purpose": "The final paragraph reiterating the settlement demand, warning of bad faith consequences if policy limits are not tendered, recommending independent counsel for the insured, and inviting settlement discussions."
+  },
+  {
+    "id": 9,
+    "name": "Signature Block",
+    "purpose": "The closing sign-off, law firm name, and the representing attorney's signature and contact details."
+  },
+  {
+    "id": 10,
+    "name": "Exhibits and Attachments",
+    "purpose": "A list or reference section detailing enclosed documents such as medical records, police reports, or prior correspondence supporting the demand."
+  }
+]

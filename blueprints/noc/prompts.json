@@ -1,0 +1,140 @@
+[
+  {
+    "prompt": "This section is the Document Title. It contains exactly: the main title of the document, which is 'NOTICE OF CLAIM'. Do NOT include the caption, addressee block, claimant information, or any other subsequent sections.\n\nDATA FROM FIELD DATA ONLY: There are no variable facts required for this section. Output the static title.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Output the title exactly as 'NOTICE OF CLAIM'.\n\nONE SECTION ONLY: Output ONLY the content for this section and stop before the next section's heading or content.",
+    "required_fields": []
+  },
+  {
+    "prompt": "You are an AI legal assistant generating the 'Caption' section of a Notice of Claim.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Caption. It contains exactly: the introductory phrase 'In the Matter of the Claim of', the name of the claimant, the label 'Claimant' or 'Claimant(s)', the separator '-against-', the name of the respondent(s), and the label 'Respondent' or 'Respondent(s)'. Do NOT include the addressee block, court name, index number, attorney information, or any subsequent sections.\n2. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided Field data. If a value is missing, output exactly the bracketed field name (e.g., [claimant_name]). Do not invent any names or facts.\n3. OUTPUT: Output only the actual document text for this section. No summaries, no meta-commentary, no markdown formatting (except standard text).\n4. LEGAL PROSE: Maintain formal legal caption structure.\n5. ONE SECTION ONLY: Output ONLY the content for the Caption section and stop immediately after the Respondent designation. Do not generate the subsequent Addressee block.",
+    "required_fields": [
+      "claimant_name",
+      "respondent_name"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the 'Addressee Block' section for a Notice of Claim.\n\nSCOPE: This section is the Addressee Block. It contains exactly the word 'TO:' followed by the names and addresses of the government entities, municipalities, or agencies being served with the notice. Do NOT include the Caption/Heading (which belongs to the previous section) or the Claimant and Attorney Information (which belongs to the next section).\n\nDATA: All variable facts (names and addresses of the entities being served) must come from the provided field data. If a required piece of data is missing, output the exact placeholder [field_name]. Do not invent any facts, names, or addresses.\n\nFORMATTING: Output the text starting with 'TO:'. List each entity and its address clearly. Format them as block addresses (Entity Name on one line, street address on the next, city/state/zip on the next) or inline separated by commas. Do not use markdown formatting like bolding or bullet points.\n\nOUTPUT: Return ONLY the document text for this section. No introductory remarks, no summaries, and no spillover into the next section.",
+    "required_fields": [
+      "addressee_entities_and_addresses"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Introductory Notice' section of a Notice of Claim.\n\nSCOPE: This section is the Introductory Notice. It contains exactly the formal introductory sentence notifying the respondent that the claimant is making a claim and demand against them. Do NOT include the caption, addressee block, claimant information, or any numbered claim details that follow.\n\nDATA: Use the provided field data exclusively. The respondent's name should be inserted where appropriate. If a data point is missing, use the exact placeholder [respondent_name]. Do not invent any facts.\n\nFORMAT & STYLE: Output ONLY the continuous formal legal prose for this section. Do not use markdown, bullet points, or introductory/concluding remarks. The text should closely mirror this structure: 'PLEASE TAKE NOTICE that the undersigned claimant hereby makes claim and demands against the [respondent_name] (hereinafter as \"respondent\"), as follows:'\n\nOUTPUT: Return only the document text for this specific section and stop immediately.",
+    "required_fields": [
+      "respondent_name"
+    ]
+  },
+  {
+    "prompt": "This section is 'Claimant and Attorney Information'. It contains exactly: an introductory statement (e.g., '1. The name and post-office address of the claimant and claimant's attorney is:') followed by the contact details of the claimant's attorney (firm name, address, phone, fax, email) and the claimant (name and address). Do NOT include the addressee block (previous section) or the nature of the claim (next section). DATA FROM FIELD DATA ONLY: All variable facts must come from the provided field data. If a piece of information is missing, output the exact string '[field_name]'. Do not invent any names, addresses, or contact numbers. OUTPUT: Generate only the actual document text for this section. No summaries, no meta-commentary. LEGAL PROSE: Use standard formal legal phrasing for the introduction, followed by a clean, structured presentation of the names and addresses. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately before the next section's heading or content.",
+    "required_fields": [
+      "claimant_name",
+      "claimant_address",
+      "claimant_attorney_firm_name",
+      "claimant_attorney_address",
+      "claimant_attorney_phone",
+      "claimant_attorney_fax",
+      "claimant_attorney_email"
+    ]
+  },
+  {
+    "prompt": "This section is the 'Nature of Claim'. It contains exactly: an introductory phrase (e.g., 'The nature of the claim:'), the specific type of action or claim (e.g., Trip and Fall, Personal Injury Action), a comprehensive list of the types of damages sought (e.g., money damages for personal injury, pain and suffering, medical expenses, lost earnings), the name of the claimant, and the legal theories of liability (e.g., negligence, recklessness, carelessness) attributed to the respondents. Do NOT include the claimant's or attorney's addresses (which belong to the previous section) or the specific time, place, and manner of the incident (which belong to the next section).\n\nAll variable facts must come from the provided Field data. If a piece of data is missing, output the exact bracketed field name (e.g., [claimant_name]). Do not invent any facts.\n\nOutput ONLY the actual document text for this section. Do not include any summaries, meta-commentary, or markdown formatting (like bullet points). Use continuous, formal legal prose. Adapt the legal language for the allegations and claims to fit the specific [claim_type] and [causes_of_action] provided. Generate ONLY this section and stop immediately before the 'Time, Place, and Manner' section.",
+    "required_fields": [
+      "claim_type",
+      "damages_sought",
+      "claimant_name",
+      "causes_of_action",
+      "respondent_names"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Time, Place, and Manner' section of a Notice of Claim.\n\nSCOPE: This section is 'Time, Place, and Manner'. It contains exactly: the exact date, time, and location of the incident; a description of how the incident occurred (the manner); the specific defect or condition causing the incident; exhaustive allegations of negligence, recklessness, and carelessness against the respondent(s); and detailed claims of actual, constructive, and prior written notice (including affirmative creation of the condition and special use, if applicable). Do NOT include the general nature of the claim (which belongs in the previous section) or the specific bodily injuries and financial damages sustained (which belong in the next section).\n\nDATA: Use ONLY the provided field data. If a piece of data is missing, insert the exact placeholder [field_name]. Do not invent any facts, names, dates, or locations.\n\nFORMAT & STYLE: Output ONLY the actual document text for this section. Do not include any introductory text, summaries, meta-commentary, or markdown formatting (no bullet points). Use continuous, formal legal prose consisting of dense, comprehensive paragraphs. Adapt the specific allegations of negligence and notice to logically fit the [case_type] and [defect_description], but maintain the exhaustive, repetitive legal style typical of municipal notices of claim (e.g., 'failing to maintain, inspect, repair, supervise, manage and/or remedy...').\n\nSTOP CONDITION: Output ONLY the content for this section. Stop immediately after concluding the allegations of negligence and notice. Do NOT begin detailing the claimant's specific physical injuries.",
+    "required_fields": [
+      "incident_date",
+      "incident_time",
+      "incident_location",
+      "incident_description",
+      "defect_description",
+      "respondent_names",
+      "case_type"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the 'Damages and Injuries' section for a Notice of Claim. \n\nThis section is the Damages and Injuries section. It contains exactly: an introductory statement declaring the damages and injuries claimed, a description of the severe and permanent bodily injuries sustained by the claimant (including specific body parts), a list of financial and non-economic damages (such as medical, hospital, and physician expenses, out-of-pocket costs, pain and suffering, lost wages, and loss of enjoyment of life), and a standard legal assertion that the full extent of the injuries and damages is ongoing and not yet fully known. \n\nDo NOT include the time, place, and manner of the incident, the allegations of negligence/liability, or the signature and verification blocks. Those belong to the previous or next sections.\n\nDATA FROM FIELD DATA ONLY: All variable facts must come from the provided field data. If a required piece of data is missing, use the exact placeholder [field_name]. Do not invent or assume any facts, names, or injuries.\n\nOUTPUT: Output only the actual document text for this section. No summaries, no meta-commentary, and no conversational filler.\n\nLEGAL PROSE: Write in continuous, formal legal prose. Do not use bullet points or markdown formatting. Adapt the legal language appropriately to the specific injuries and claims provided, ensuring it matches the formal tone of a statutory Notice of Claim.\n\nONE SECTION ONLY: Stop generating immediately after concluding the description of the damages and injuries. Do not bleed into the signature block or verification.",
+    "required_fields": [
+      "claimant_name",
+      "specific_injuries_sustained"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Demand and Intent to Sue' section of a Notice of Claim.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is Demand and Intent to Sue. It contains exactly: the formal presentation of the claim for adjustment and payment, the statement of the total amount claimed, and a formal notification that the claimant intends to commence an action on this claim if it is not adjusted and paid within the time provided by law. Do NOT include the description of injuries or damages sustained (which belongs to the previous section) or the signature, date, and verification blocks (which belong to the next section).\n2. DATA FROM FIELD DATA ONLY: All variable facts come from Field data. Missing \u2192 [field_name]. No invented facts. The only variable required for this section is `total_amount_claimed`.\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n4. LEGAL PROSE: Continuous formal legal prose; no bullets or markdown. Use standard statutory language for presenting a claim to a municipality (e.g., 'That said claim and demand is hereby presented for adjustment and payment. Total amount claimed: [total_amount_claimed]. You are hereby notified that unless it is adjusted and paid within the time provided by law...').\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately before the signature block.",
+    "required_fields": [
+      "total_amount_claimed"
+    ]
+  },
+  {
+    "prompt": "This section is the Attachments List. It contains exactly: the introductory phrase 'Attached hereto is:' followed by a list of the attached documents (such as a verification page and photographs). Do NOT include the signature block, the actual verification text, or any preceding sections about damages or liability.\n\nDATA FROM FIELD DATA ONLY: All variable facts (such as the specific attachments or the incident location type) come from Field data. Missing -> [field_name]. No invented facts.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Use formal legal prose. Do not use markdown formatting or bullet points. Format the list exactly as plain text with line breaks and semicolons, matching the style: 'Attached hereto is:\n[attachment 1];\n[attachment 2] -'. Adapt the attachment descriptions based on the provided [list_of_attachments] or [incident_location_type].\n\nONE SECTION ONLY: Output ONLY the content for this section and stop before the next section.",
+    "required_fields": [
+      "list_of_attachments",
+      "incident_location_type"
+    ]
+  },
+  {
+    "prompt": "You are an AI assistant tasked with generating the 'Date' section of a Notice of Claim. This section is the Date block. It contains exactly: the word 'Dated:' followed by the city and state of signing, and on the next line, the month of signing, a blank line for the day, and the year. Do NOT include the signature block, the verification section, or any preceding allegations or damages. DATA FROM FIELD DATA ONLY: All variable facts (city, state, month, year) must come from the provided field data. If a field is missing, output the exact placeholder [field_name]. Do not invent any facts, dates, or locations. OUTPUT: Output only the actual document text for this section. No summaries, no meta-commentary, no markdown formatting other than basic text structure. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately before the signature block. Format exactly like this:\nDated: [signing_city], [signing_state]\n\t[signing_month]_____, [signing_year]",
+    "required_fields": [
+      "signing_city",
+      "signing_state",
+      "signing_month",
+      "signing_year"
+    ]
+  },
+  {
+    "prompt": "You are an AI assistant generating the 'Signature Block' section of a legal Notice of Claim.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Signature Block. It contains exactly: a blank line for the signature, followed by the printed name of the claimant's attorney, the law firm name, the law firm's full address, and the law firm's phone number. Do NOT include the Verification section, the date of signing, or any preceding allegations or damages.\n2. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided Field data. If a value is missing, output the exact string: [field_name]. Do not invent any facts, names, or contact information.\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary, no introductory phrases.\n4. LEGAL PROSE: Output as a standard legal signature block. Do not use markdown formatting like bolding or bullet points.\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately before the Verification section.",
+    "required_fields": [
+      "claimants_attorney_name",
+      "claimants_law_firm_name",
+      "claimants_law_firm_address_line_1",
+      "claimants_law_firm_city_state_zip",
+      "claimants_law_firm_phone_number"
+    ]
+  },
+  {
+    "prompt": "This section is the Verification Heading. It contains exactly: the title indicating the start of the verification section. Do NOT include the actual verification body text, signatures, jurat, or notary blocks that follow.\n\nDATA FROM FIELD DATA ONLY: Determine the heading based on the [verifier_type] field. If the [verifier_type] indicates an attorney is verifying the document, output 'ATTORNEY'S VERIFICATION'. If it is the claimant or another party, output 'VERIFICATION'. Missing \u2192 [verifier_type]. No invented facts.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Output the heading in ALL CAPS. Do not use markdown formatting or bullets.\n\nONE SECTION ONLY: Output ONLY the heading for this section and stop before the actual verification body text.",
+    "required_fields": [
+      "verifier_type"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the 'Verification Venue and Body' section for a legal document (Notice of Claim). This section is the Verification Venue and Body. It contains exactly: the State and County venue block (e.g., 'STATE OF [venue_state] } COUNTY OF [venue_county] } ss.:') and the sworn verification statement affirming the truth of the document's contents. Do NOT include the actual signature lines, date block, or the Notary Public jurat, as those belong to the next section.\n\nAll variable facts must come from the provided Field data. If a field is missing, output the exact placeholder [field_name]. Do not invent facts.\n\nOutput ONLY the actual document text for this section. No summaries, no meta-commentary, no markdown formatting outside of standard text representation.\n\nDraft in continuous formal legal prose. Adapt the verification language based on the `affiant_role`. \n- If the affiant is the claimant/plaintiff, state their name (`affiant_name`), that they are the `affiant_role` in the action, have read the annexed `document_title`, and know the contents to be true except those upon information and belief, which are based on personal files and records.\n- If the affiant is the attorney, state that the undersigned is an attorney duly admitted to practice, that they are the attorney for the claimant `claimant_name`, have read the annexed `document_title`, and that their belief is based on file investigations. Include the standard clause that the reason the attorney is making the verification instead of the claimant is that the claimant resides outside of `attorney_office_county` where the attorney maintains their office, and conclude with an affirmation under penalties of perjury.\n\nStop immediately after the verification paragraph. Do not generate the signature block.",
+    "required_fields": [
+      "venue_state",
+      "venue_county",
+      "affiant_name",
+      "affiant_role",
+      "document_title",
+      "claimant_name",
+      "attorney_office_county"
+    ]
+  },
+  {
+    "prompt": "This section is the Verification Date and Signature block. It contains exactly: the location (city and state) where the document is dated, the month and year of signing with a blank space for the day, a signature line, and the printed name of the signatory. Do NOT include the verification text itself, the notary block, or any preceding claims/damages sections.\n\nDATA FROM FIELD DATA ONLY: All variable facts (signing city, signing state, signing month, signing year, signatory name) come from Field data. If a field is missing, output exactly [field_name]. Do not invent any facts, dates, or names.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Format as a standard legal execution block. Start with 'Dated: [signing_city], [signing_state]', followed on the next line by '[signing_month] _____, [signing_year]'. Below this, provide a signature line (using underscores) and place the [signatory_name] beneath it. Do not use markdown formatting like bolding or bullets.\n\nONE SECTION ONLY: Output ONLY the content for this section and stop before the next section's heading or content.",
+    "required_fields": [
+      "signing_city",
+      "signing_state",
+      "signing_month",
+      "signing_year",
+      "signatory_name"
+    ]
+  },
+  {
+    "prompt": "This section is the Litigation Backer. It contains exactly: the repeated case caption (Claimant vs. Respondent), the document title, the claimant's attorney/law firm contact information, and standard blank boilerplate notices for Service, Entry, and Settlement. Do NOT include any substantive allegations, signatures, verifications, or content that belongs to previous sections.\n\nAll variable facts (names, addresses, attorney info) come from Field data. Missing \u2192 [field_name]. No invented facts.\n\nOutput ONLY the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nMaintain the traditional structured layout of a legal backer. Include the caption ('In the Matter of the claim of [claimant_name] Claimant(s) -against- [respondent_names] Respondent(s)'), the [document_title], and the attorney block ([claimant_attorney_name], [claimant_law_firm], [claimant_law_firm_address], [claimant_law_firm_phone], [claimant_law_firm_fax], [claimant_law_firm_email]). Include the standard blank forms for 'Service of a copy...', 'NOTICE OF ENTRY', and 'NOTICE OF SETTLEMENT' leaving the dates, court, and judge names blank or as underscores, concluding with the law firm's name.\n\nGenerate ONLY the content for this section and stop immediately after the final attorney/firm name at the end of the backer.",
+    "required_fields": [
+      "claimant_name",
+      "respondent_names",
+      "document_title",
+      "claimant_attorney_name",
+      "claimant_law_firm",
+      "claimant_law_firm_address",
+      "claimant_law_firm_phone",
+      "claimant_law_firm_fax",
+      "claimant_law_firm_email"
+    ]
+  }
+]

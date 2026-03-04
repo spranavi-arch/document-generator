@@ -47,6 +47,7 @@ class Pipeline:
         curl_str: str | None = None,
         extra_context: str | None = None,
         api_url: str | None = None,
+        category_of_document: str | None = None,
     ) -> dict:
         """
         Returns dict with:
@@ -61,7 +62,7 @@ class Pipeline:
             sample_text = extracted_samples[i] if i < len(extracted_samples) else ""
             section_prompts_list.append(
                 self._section_prompt_generator.generate_prompt_and_fields(
-                    sec["name"], sec.get("purpose", ""), sample_text
+                    sec["name"], sec.get("purpose", ""), sample_text, category_of_document
                 )
             )
 
@@ -77,7 +78,7 @@ class Pipeline:
         auth_str = (curl_str or "").strip()
         if auth_str:
             if all_required:
-                field_to_question = self._question_generator.generate_questions_for_fields(all_required)
+                field_to_question = self._question_generator.generate_questions_for_fields(all_required, category_of_document)
                 field_values = self._field_fetcher.fetch_all_fields_via_chat(
                     auth_str, all_required, field_to_question
                 )
@@ -125,6 +126,7 @@ def run(
     curl_str: str | None = None,
     extra_context: str | None = None,
     api_url: str | None = None,
+    category_of_document: str | None = None,
 ):
     """Backward-compatible: delegates to Pipeline().run."""
-    return Pipeline().run(doc1, doc2, curl_str=curl_str, extra_context=extra_context, api_url=api_url)
+    return Pipeline().run(doc1, doc2, curl_str=curl_str, extra_context=extra_context, api_url=api_url, category_of_document=category_of_document)

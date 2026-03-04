@@ -3,6 +3,7 @@ JSON parsing and text utilities. Encapsulated in classes (OOP).
 """
 import json
 import re
+import ast
 
 
 class JsonParser:
@@ -71,34 +72,45 @@ class JsonParser:
 
     @classmethod
     def _try_parse(cls, s: str):
-        """Try json.loads; fix trailing commas, unescaped newlines, and truncated JSON."""
+        """Try json.loads; fix trailing commas, unescaped newlines, and truncated JSON. Also tries ast.literal_eval."""
         try:
-            return json.loads(s)
+            return json.loads(s, strict=False)
         except json.JSONDecodeError:
             pass
+        
+        # Try python literal eval (handles single quotes, etc.)
+        try:
+            return ast.literal_eval(s)
+        except (ValueError, SyntaxError, MemoryError):
+            pass
+
         fixed = re.sub(r",\s*}", "}", re.sub(r",\s*]", "]", s))
         try:
-            return json.loads(fixed)
+            return json.loads(fixed, strict=False)
         except json.JSONDecodeError:
             pass
+        
         fixed = cls._escape_newlines_in_json_strings(s)
         try:
-            return json.loads(fixed)
+            return json.loads(fixed, strict=False)
         except json.JSONDecodeError:
             pass
+        
         fixed = re.sub(r",\s*}", "}", re.sub(r",\s*]", "]", fixed))
         try:
-            return json.loads(fixed)
+            return json.loads(fixed, strict=False)
         except json.JSONDecodeError:
             pass
+        
         fixed = cls._repair_truncated_json(s)
         try:
-            return json.loads(fixed)
+            return json.loads(fixed, strict=False)
         except json.JSONDecodeError:
             pass
+        
         fixed = cls._repair_truncated_json(cls._escape_newlines_in_json_strings(s))
         try:
-            return json.loads(fixed)
+            return json.loads(fixed, strict=False)
         except json.JSONDecodeError:
             return None
 

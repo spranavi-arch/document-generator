@@ -1,0 +1,102 @@
+[
+  {
+    "prompt": "This section is the Header and Date. It contains exactly: the document title or header indicating the nature of the letter (e.g., 'DEMAND LETTER \u2013 REQUIRES RESPONSE'), the date the letter was issued, and the method of delivery (e.g., 'Via Certified Mail & Email'). Do NOT include the recipient's information, sender's information, or the reference block, as those belong to the subsequent sections.\n\nConstruct the header using the provided field data. All variable facts must come from the Field data. If a field is missing, output the exact placeholder (e.g., [letter_date]). Do not invent any dates or delivery methods.\n\nOutput ONLY the actual document text for this section. Format it clearly as a formal legal header block. Do not include any markdown formatting, bullet points, meta-commentary, or introductory text. Stop immediately after outputting the header, date, and delivery method.",
+    "required_fields": [
+      "letter_date",
+      "delivery_method"
+    ]
+  },
+  {
+    "prompt": "This section is the Recipient Information. It contains exactly: the insurance company's name, mailing address, and an attention line directing the letter to the specific claims adjuster. Do NOT include the date, sender information, reference block (claim/policy numbers), salutation, or any other subsequent sections.\n\nConstruct the section exactly as follows, using standard address block formatting:\n[insurance_company_name]\n[insurance_company_address]\n\nAttention: [claims_adjuster_name]\n\nAll variable facts must come from the provided Field data. If a piece of data is missing, output the exact field name in brackets, e.g., [claims_adjuster_name]. Do not invent any names, addresses, or facts. Output ONLY the actual document text for this section. Do not include any summaries, meta-commentary, or markdown formatting.",
+    "required_fields": [
+      "insurance_company_name",
+      "insurance_company_address",
+      "claims_adjuster_name"
+    ]
+  },
+  {
+    "prompt": "This section is the Sender Information. It contains exactly: the plaintiff's attorney's name, the law firm's name, the law firm's address, phone number, and fax number. Do NOT include the date, recipient information, reference block, salutation, or any other subsequent sections. All variable facts must come from the provided Field data. If a field is missing, output the exact placeholder [field_name]. Do not invent any names, addresses, or contact numbers. Output ONLY the actual document text for this section. Do not include any summaries, meta-commentary, markdown formatting, or bullet points. Present the information as a clean, unformatted text block with the attorney name on the first line, law firm name on the second, address on the third, 'Phone: ' followed by the phone number on the fourth, and 'Fax: ' followed by the fax number on the fifth.",
+    "required_fields": [
+      "plaintiffs_attorney_name",
+      "plaintiffs_law_firm_name",
+      "plaintiffs_law_firm_address",
+      "plaintiffs_law_firm_phone",
+      "plaintiffs_law_firm_fax"
+    ]
+  },
+  {
+    "prompt": "This section is the Reference Block. It contains exactly: the 'Re:' line indicating the Plaintiff versus the Defendant, the Claim Number, the Policy Number, and the internal File Number ('Our File No.'). Do NOT include the sender information, recipient information, date, salutation, or any part of the demand letter body. All variable facts must come from the provided Field data. If a value is missing, output the exact placeholder [field_name]. Do not invent any facts, names, or numbers. Output ONLY the actual document text for this section. No summaries, no meta-commentary, and no markdown formatting other than standard line breaks. Format the output exactly as follows:\n\nRe:\t[plaintiff_name] v. [defendant_name]\nClaim No.: [claim_number]\nPolicy No.: [policy_number]\nOur File No.: [internal_file_number]\n\nStop generating immediately after the internal file number.",
+    "required_fields": [
+      "plaintiff_name",
+      "defendant_name",
+      "claim_number",
+      "policy_number",
+      "internal_file_number"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate ONLY the 'Salutation' section of a Personal Injury Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Salutation. It contains exactly: the opening greeting addressed to the claims adjuster or insurance company. Do NOT include the Reference Block (Claim/Policy numbers, Plaintiff/Defendant names) which precedes this section, nor the Opening Demand which follows it.\n\n2. DATA FROM FIELD DATA ONLY: All variable facts come from Field data. If an `adjuster_name` is provided in the field data, format the salutation as 'Dear [adjuster_name]:'. If no specific name is provided or the field is missing, output exactly the sample text: 'To Whom It May Concern:'. Do not invent any names or facts.\n\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\n4. LEGAL PROSE: Continuous formal legal prose; no bullets or markdown.\n\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop immediately after the salutation. Do not generate any subsequent sections.",
+    "required_fields": []
+  },
+  {
+    "prompt": "You are generating the 'Opening Demand' section of a Personal Injury Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Opening Demand. It contains exactly: the specific monetary settlement demand, an offer to provide a full and final release of all claims in exchange for the policy limit, a statement that the Plaintiff is responsible for all liens, a specific response deadline, and a formal reminder of the insurer's legal obligation to notify their insured of the demand before rejecting it (including a relevant case citation). Do NOT include the salutation, liability arguments, medical summaries, or closing signatures.\n\n2. DATA FROM FIELD DATA ONLY: All variable facts come from Field data. Missing -> [field_name]. No invented facts. Use the following fields: settlement_demand_amount, response_deadline_days, and relevant_case_citation.\n\n3. OUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\n4. LEGAL PROSE: Continuous formal legal prose; no bullets or markdown. Ensure the tone is firm and legally binding.\n\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop before the next section's heading or content.",
+    "required_fields": [
+      "settlement_demand_amount",
+      "response_deadline_days",
+      "relevant_case_citation"
+    ]
+  },
+  {
+    "prompt": "This section is the Liability section of a Personal Injury Demand Letter. It contains exactly: the heading 'Liability:' followed by a brief factual description of the accident, the circumstances surrounding the incident, and the basis for the insured's fault. Do NOT include the opening demand, damages/medical summary, legal/bad faith warnings, or any content belonging to previous or subsequent sections.\n\nDATA FROM FIELD DATA ONLY: All variable facts (such as the description of the accident) must come from the provided field data. If a piece of data is missing, output the exact placeholder [field_name]. Do not invent or assume any facts.\n\nOUTPUT: Generate only the actual document text for this section. Do not include any summaries, meta-commentary, or conversational text.\n\nLEGAL PROSE: Use continuous formal legal prose. Do not use bullet points or markdown formatting. Adapt the legal language to the specific accident description provided in the field data (e.g., 'Our client was [accident_description].').\n\nONE SECTION ONLY: Output ONLY the content for the Liability section and stop immediately before the Damages/Medical Summary section.",
+    "required_fields": [
+      "accident_description"
+    ]
+  },
+  {
+    "prompt": "You are generating the 'Damages and Medical Summary' section of a Personal Injury Demand Letter. \n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Damages and Medical Summary. It contains exactly: a detailed, categorized breakdown of the plaintiff's injuries, including MRI Results (with dates, findings, and clinical impressions), Procedures, Injections and Surgeries (with dates, specific procedures, and postoperative conditions), and Range of Motion (ROM) Results (comparing actual flexion/extension, rotation, and lateral bend against normal values, along with noted symptoms). Do NOT include the accident description, liability arguments, which belong to the previous section. Do NOT include settlement demands, policy limits, or legal/bad faith warnings, which belong to the subsequent sections.\n\n2. DATA FROM FIELD DATA ONLY: Use only the provided variable facts. Do not invent or infer any medical findings, dates, or procedures. If any required data is missing, output the exact field name enclosed in brackets (e.g., [left_shoulder_mri_date]).\n\n3. OUTPUT: Provide only the actual document text for this section. Do not include any introductory summaries, meta-commentary, or conversational text.\n\n4. LEGAL PROSE: Write in formal, objective legal and medical prose. Do NOT use markdown formatting (no asterisks, bolding, or bullet points). Use standard plain-text line breaks and indentation to separate the categories (MRI Results; Procedures, Injections and Surgeries; Range of Motion Results) and their respective details exactly as structured in the sample.\n\n5. ONE SECTION ONLY: Output ONLY the content for the Damages and Medical Summary section. Stop generating immediately after the final Range of Motion symptom description, before any legal warnings or closing statements.",
+    "required_fields": [
+      "left_shoulder_mri_date",
+      "left_shoulder_mri_findings",
+      "left_shoulder_mri_impression",
+      "left_knee_mri_reason",
+      "cervical_spine_mri_date",
+      "cervical_spine_mri_findings",
+      "lumbar_spine_mri_date",
+      "lumbar_spine_mri_findings",
+      "lumbar_spine_mri_impression",
+      "thoracic_spine_mri_date",
+      "thoracic_spine_mri_findings",
+      "thoracic_spine_mri_impression",
+      "right_knee_arthroscopy_date",
+      "right_knee_arthroscopy_procedures",
+      "right_knee_arthroscopy_postop_condition",
+      "chiropractic_treatments_services",
+      "trigger_point_injections_details",
+      "cervical_spine_rom_flexion_extension",
+      "cervical_spine_rom_rotation",
+      "cervical_spine_rom_lateral_bend",
+      "cervical_spine_rom_symptoms",
+      "lumbar_spine_rom_flexion_extension",
+      "lumbar_spine_rom_rotation",
+      "lumbar_spine_rom_lateral_bend",
+      "lumbar_spine_rom_symptoms"
+    ]
+  },
+  {
+    "prompt": "You are an expert legal drafter. Generate the 'Legal and Bad Faith Warning' section of a Personal Injury Demand Letter.\n\n1. DEFINE SECTION SCOPE EXPLICITLY: This section is the Legal and Bad Faith Warning. It contains exactly: A concluding warning to the insurance carrier stating that failure to tender the policy limits will result in a recommendation for the insured to hire independent third-party bad-faith counsel due to a conflict of interest, followed by a request to contact the sender's office to discuss settlement or request additional information. Do NOT include the preceding Damages/Medical Summary Section or the subsequent Closing and Signature section.\n2. DATA FROM FIELD DATA ONLY: All variable facts must come from the provided field data. If a required fact is missing, insert the exact placeholder [field_name]. Do not invent, assume, or hallucinate any facts, names, or dates. (Note: This specific boilerplate section typically does not require variable fields, but adhere to this rule if any are introduced).\n3. OUTPUT: Output ONLY the actual document text for this section. No summaries, no meta-commentary, no section headings. Document text only.\n4. LEGAL PROSE: Use continuous formal legal prose; no bullets or markdown. Adapt legal language appropriately if the case context requires it, but maintain the core bad-faith warning.\n5. ONE SECTION ONLY: Output ONLY the content for this section and stop before the next section's heading or content.",
+    "required_fields": []
+  },
+  {
+    "prompt": "This section is the Closing and Signature. It contains exactly: the valediction (e.g., 'Very truly yours,'), the sending law firm's name, and the sending attorney's name. Do NOT include the preceding Legal/Bad Faith Warning or any subsequent Exhibits/Attachments list. All variable facts must come from the provided Field data. If a field is missing, output the exact placeholder [field_name]. Do not invent any names or firm details. Output ONLY the actual document text for this section. No summaries, no meta-commentary, and no markdown formatting other than standard line breaks. Stop generating immediately after the attorney's name.",
+    "required_fields": [
+      "sender_law_firm_name",
+      "sender_attorney_name"
+    ]
+  },
+  {
+    "prompt": "This section is the Exhibits and Attachments section of a Personal Injury Demand Letter. It contains exactly: a formal declaration or list of the enclosed documents (such as medical records, police reports, and billing statements) that support the demand. Do NOT include the closing, signature block, or any preceding sections regarding liability, damages, or legal warnings.\n\nDATA FROM FIELD DATA ONLY: All variable facts must come from the provided field data. If a field is missing, output the exact placeholder (e.g., [list_of_exhibits]). Do not invent any exhibits, documents, or facts.\n\nOUTPUT: Only the actual document text for this section. No summaries, no meta-commentary. Document text only.\n\nLEGAL PROSE: Write in continuous formal legal prose or a standard comma-separated enclosure line (e.g., 'Enclosures: [list_of_exhibits].' or 'Attached hereto as exhibits in support of this demand are the following: [list_of_exhibits].'). Do not use markdown formatting, asterisks, or bullet points.\n\nONE SECTION ONLY: The prompt must instruct the model to output ONLY the content for this section and to stop immediately after listing the enclosures.",
+    "required_fields": [
+      "list_of_exhibits"
+    ]
+  }
+]

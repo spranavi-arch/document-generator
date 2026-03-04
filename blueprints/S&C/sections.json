@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "name": "Summons Caption",
+    "purpose": "Court name, county, case index number, date filed, and party names at the top of the Summons."
+  },
+  {
+    "id": 2,
+    "name": "Summons Notice",
+    "purpose": "The 'TO THE ABOVE NAMED DEFENDANT' notice, response deadline instructions, default warning, and basis of venue."
+  },
+  {
+    "id": 3,
+    "name": "Summons Signature Block and Defendant Address",
+    "purpose": "Date of the summons, plaintiff's attorney signature block, contact information, and the 'TO:' block specifying the defendant's name and address for service."
+  },
+  {
+    "id": 4,
+    "name": "Complaint Caption",
+    "purpose": "Court name, county, case index number, date filed, and party names at the top of the Complaint."
+  },
+  {
+    "id": 5,
+    "name": "Complaint Introduction",
+    "purpose": "Introductory sentence stating the plaintiff appears by their attorneys and alleges the causes of action upon information and belief."
+  },
+  {
+    "id": 6,
+    "name": "Cause of Action: Negligence",
+    "purpose": "The heading and all subsequent paragraphs detailing the facts of the accident, vehicle ownership, specific acts of negligence, statutory exceptions (CPLR and Insurance Law), injuries, and damages."
+  },
+  {
+    "id": 7,
+    "name": "Complaint Signature Block",
+    "purpose": "Date of the complaint, 'Yours, etc.;', and plaintiff's attorney signature block with contact information."
+  },
+  {
+    "id": 8,
+    "name": "Attorney's Verification",
+    "purpose": "The 'ATTORNEY'S VERIFICATION' heading and the attorney's sworn statement affirming the truth of the complaint, explaining why the attorney is verifying instead of the plaintiff, along with the date and signature."
+  },
+  {
+    "id": 9,
+    "name": "Litigation Back Title and Attorney Info",
+    "purpose": "The 'SUMMONS AND VERIFIED COMPLAINT' title block and attorney contact information enclosed in equal signs on the litigation back."
+  },
+  {
+    "id": 10,
+    "name": "Certification",
+    "purpose": "The certification pursuant to 22 NYCRR 130-1.1(c) stating the pleadings are not frivolous, including the attorney's signature."
+  },
+  {
+    "id": 11,
+    "name": "Admission of Service",
+    "purpose": "The block for 'Service of a copy of the within is hereby admitted' along with blank date and attorney signature lines."
+  },
+  {
+    "id": 12,
+    "name": "Notice of Entry and Settlement",
+    "purpose": "The 'PLEASE TAKE NOTICE' section containing the Notice of Entry, Notice of Settlement, blank dates, and final attorney firm sign-off."
+  }
+]

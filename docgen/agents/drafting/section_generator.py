@@ -3,8 +3,8 @@ Generate one section using the section prompt, extracted sample text for this se
 Uses pre-extracted section sample text (no full-doc pass).
 Uses SectionGenerator class (OOP).
 """
-from docgen.llm_client import LLMClient
-from docgen.prompts import PromptsBuilder
+from docgen.core.llm_client import LLMClient
+from docgen.core.prompts import PromptsBuilder
 
 
 class SectionGenerator:
@@ -47,7 +47,7 @@ SAMPLE FOR THIS SECTION (replicate format, structure, and tone — only data wil
 """
 
         case_type_instruction = """
-DOCUMENT TYPE: The sample may be a Summons & Complaint, a Motion (notice/affidavit/memorandum/order), a Notice of Claim, or another type. Use the sample for FORMAT and STRUCTURE only (layout, numbering, headings, signature/verification blocks).
+DOCUMENT TYPE: The sample may be a Summons & Complaint, a Motion (notice/affidavit/memorandum/order), a Notice of Claim, Demand letter, medical chronology, or any another type. Use the sample for FORMAT and STRUCTURE (layout, numbering, headings, signature/verification blocks).
 - If the section is complaint-like (allegations, causes of action): use legal language appropriate to the NEW case type (e.g. premises, motor vehicle, medical malpractice); do not copy cause-of-action wording if it does not fit.
 - If the section is motion-like (notice of motion, affidavit, memorandum, order): preserve notice/affidavit/memorandum style; substitute facts and relief from Field data.
 - If the section is notice-of-claim-like (claimant, public corporation, nature of claim, time/place, damages): preserve statutory and factual block structure; substitute claimant/case data from Field data.
@@ -68,6 +68,8 @@ Field data (new case — substitute these values; do not invent):
 
 CASE SUMMARY: If Field data above includes "case_summary" or "case_summary_or_context", use that data whenever this section needs contextual details, background facts, or narrative (e.g. allegations, statement of facts, notice text) that are not fully covered by the other fields. Use the case summary to inform what you write for this particular section; do not paste it verbatim unless it fits the section's purpose.
 
+OMISSION RULE: If this section is specific to a certain injury, fact, or legal claim (e.g. "Cervical MRI", "Lost Wages", "Third Cause of Action") AND the Field Data/Case Summary contains NO evidence for it or explicitly contradicts it (e.g. case is about a foot injury, section is about neck MRI), output the exact string <<SECTION_SKIPPED>>. Do not generate a section with placeholders like [Findings] if the entire topic is irrelevant to this case.
+
 CRITICAL — follow exactly:
 1. OUTPUT THE DOCUMENT TEXT ONLY for this section. Same layout and structure as the sample (court header, caption, body, date lines, signature blocks — whatever the sample for this section contains). No summaries or explanations. Only the real document text.
 2. FORMAT & STRUCTURE: Replicate the sample's format, structure, spacing, and numbering for this section. Use Field data above for all variable facts (names, dates, court, index no., addresses, attorney info). If a value is missing, use placeholders: [Date], [Index No.], [Judge Name], [Attorney Name], etc.
@@ -75,6 +77,7 @@ CRITICAL — follow exactly:
 4. CONSISTENCY: Use the same party names, case number, court name, dates, addresses, and attorney information throughout (same spelling and form).
 5. MAXIMUM INFORMATION: Use all information in the Field data above, including the case summary when this section needs it. Do not omit facts, dates, or figures that appear in the Field data.
 6. ONE SECTION ONLY: {section_scope} Do not merge multiple sections. No analysis, explanations, or comments.
+7. OMISSION CHECK: Check the OMISSION RULE above. If this section is irrelevant to the new case, output <<SECTION_SKIPPED>>.
 {PromptsBuilder.DOCUMENT_RULES}
 """
         return self._llm.generate(full_prompt, max_tokens=4096, temperature=0.05).strip()

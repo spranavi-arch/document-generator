@@ -3,9 +3,9 @@ For each section: generate (1) a prompt to create that section, (2) list of requ
 Uses extracted sample text for each section (no full-doc pass).
 Uses SectionPromptGenerator class (OOP).
 """
-from docgen.llm_client import LLMClient
-from docgen.prompts import PromptsBuilder
-from docgen.utils import JsonParser
+from docgen.core.llm_client import LLMClient
+from docgen.core.prompts import PromptsBuilder
+from docgen.core.utils import JsonParser
 
 
 class SectionPromptGenerator:
@@ -22,6 +22,7 @@ class SectionPromptGenerator:
         section_name: str,
         purpose: str,
         sample_text: str,
+        category_of_document: str,
     ) -> dict:
         """
         Returns { "prompt": str, "required_fields": list[str] }.
@@ -31,7 +32,7 @@ class SectionPromptGenerator:
             section_name, purpose, sample_text or ""
         )
         response = self._llm.generate(
-            prompt,
+            [prompt, f"""overall structure of document which can help in generating prompt more accurately: {category_of_document}"""],
             json_mode=True,
             max_tokens=4096,
             temperature=0.15,
@@ -64,6 +65,7 @@ def generate_prompt_and_fields(
     section_name: str,
     purpose: str,
     sample_text: str,
+    category_of_document: str,
 ) -> dict:
     """Backward-compatible: delegates to SectionPromptGenerator().generate_prompt_and_fields."""
-    return SectionPromptGenerator().generate_prompt_and_fields(section_name, purpose, sample_text)
+    return SectionPromptGenerator().generate_prompt_and_fields(section_name, purpose, sample_text, category_of_document)

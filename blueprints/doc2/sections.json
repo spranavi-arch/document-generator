@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "name": "Header",
+    "purpose": "Contains the date, delivery method, and the recipient's name, title, organization, and address."
+  },
+  {
+    "id": 2,
+    "name": "Subject Line",
+    "purpose": "The 'Re:' line indicating the subject matter of the letter and the claims being made."
+  },
+  {
+    "id": 3,
+    "name": "Salutation",
+    "purpose": "The formal opening greeting to the recipient."
+  },
+  {
+    "id": 4,
+    "name": "Introduction",
+    "purpose": "Statement of legal representation, background on the clients, and an overview of the claims being made."
+  },
+  {
+    "id": 5,
+    "name": "Statement of Facts",
+    "purpose": "Detailed chronological account of the incidents, grievances, and discriminatory or unlawful conduct."
+  },
+  {
+    "id": 6,
+    "name": "Legal Basis and Violations",
+    "purpose": "Explanation of how the opposing party's conduct violates specific state or federal laws."
+  },
+  {
+    "id": 7,
+    "name": "Conclusion and Demand",
+    "purpose": "Statement of damages, emotional distress, threat of imminent litigation, and an offer to resolve the matter amicably out of court."
+  },
+  {
+    "id": 8,
+    "name": "Preservation of Evidence Notice",
+    "purpose": "Formal demand to preserve all relevant physical and electronically stored information, devices, and communications (spoliation hold)."
+  },
+  {
+    "id": 9,
+    "name": "Response Deadline",
+    "purpose": "Specific deadline given to the recipient to respond to discuss an amicable resolution before a lawsuit is filed."
+  },
+  {
+    "id": 10,
+    "name": "Sign-off and Signature",
+    "purpose": "The formal closing valediction and the name and firm of the attorney sending the letter."
+  }
+]
