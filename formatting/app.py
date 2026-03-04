@@ -107,17 +107,24 @@ if template_file:
 
 generated_text = st.text_area("Enter the generated text", height=300)
 
+use_slot_fill = st.checkbox(
+    "Use slot fill",
+    value=False,
+    help="When checked, the LLM maps your text into the template's exact slots (paragraph-by-paragraph). When unchecked, the LLM segments text freely and styles are applied from the template.",
+)
+
 if generated_text and template_file:
     if st.button("Format with LLM"):
         with st.spinner("Calling LLM and building document…"):
             try:
-                output_path, preview_text = process_document(generated_text, template_file)
+                output_path, preview_text = process_document(generated_text, template_file, use_slot_fill=use_slot_fill)
                 st.session_state["formatted_output_path"] = output_path
                 st.session_state["formatted_editor"] = preview_text
                 # Use alignment-aware HTML from the actual formatted DOCX so CKEditor
                 # shows a closer WYSIWYG preview of the downloaded document.
                 st.session_state["formatted_editor_html"] = docx_to_html(output_path)
                 st.session_state.pop("ckeditor_open_url", None)  # so user gets a fresh "Send to CKEditor" link
+                st.session_state.pop("tinymce_open_url", None)   # so user gets a fresh "Send to TinyMCE" link
                 st.success("Document formatted successfully. Edit below with alignment and formatting, then download.")
             except Exception as e:
                 st.error(str(e))
@@ -147,6 +154,31 @@ if st.session_state.get("formatted_output_path") or st.session_state.get("format
             st.session_state["ckeditor_open_url"] = None
     if st.session_state.get("ckeditor_open_url"):
         st.link_button("Open in CKEditor 5", url=st.session_state["ckeditor_open_url"], help="Edit the formatted document in CKEditor (opens in a new tab).")
+
+    # Option to open formatted content in TinyMCE (same Flask app at CKEDITOR_FLASK_URL)
+    if st.button("Send to TinyMCE", key="send_to_tinymce", help="Push formatted text to TinyMCE and get a link to edit there."):
+        html_for_tinymce = st.session_state.get("formatted_editor_html") or "<p><br></p>"
+        try:
+            import urllib.request
+            import json as _json
+            req = urllib.request.Request(
+                CKEDITOR_FLASK_URL.rstrip("/") + "/tinymce/api/set-content",
+                data=_json.dumps({"html": html_for_tinymce}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+                token = data.get("load_token")
+            if token:
+                st.session_state["tinymce_open_url"] = CKEDITOR_FLASK_URL.rstrip("/") + "/tinymce?load=" + token
+            else:
+                st.session_state["tinymce_open_url"] = None
+        except Exception as e:
+            st.error("Could not reach TinyMCE (is Flask running?): " + str(e))
+            st.session_state["tinymce_open_url"] = None
+    if st.session_state.get("tinymce_open_url"):
+        st.link_button("Open in TinyMCE", url=st.session_state["tinymce_open_url"], help="Edit the formatted document in TinyMCE (opens in a new tab).")
 
 if st.session_state.get("formatted_output_path") or st.session_state.get("formatted_editor_html"):
     st.subheader("Editor")

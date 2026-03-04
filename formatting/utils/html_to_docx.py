@@ -75,38 +75,30 @@ def _looks_like_numbered_paragraph(runs):
 
 
 def _legal_paragraph_format(text: str) -> dict:
-    """Infer legal-document formatting (center, bold, italic, underline) from content so download matches summons/complaint style."""
+    """Infer legal-document formatting. Center only for true caption lines (title, court, -against-); do not center body text."""
     if not text or not text.strip():
         return {}
     t = text.strip()
     lower = t.lower()
     out = {}
-    # Court header: center
-    if "supreme court" in lower and ("new york" in lower or "state" in lower) or (t.startswith("COUNTY OF") and len(t) < 50):
+    # Court header: center (Supreme Court of ..., COUNTY OF ...)
+    if ("supreme court" in lower and ("new york" in lower or "state" in lower)) or (t.startswith("COUNTY OF") and len(t) < 50):
         out["alignment"] = "center"
-    # Document title: center + bold (NOTICE OF CLAIM, SUMMONS, etc.)
-    elif t in ("SUMMONS", "VERIFIED COMPLAINT", "COMPLAINT", "NOTICE OF CLAIM") or (len(t) < 30 and t.isupper() and "cause" not in lower):
-        out["alignment"] = "center"
-        out["bold"] = True
-    # Jury trial / Attorneys for: center + italic
-    elif "jury trial demanded" in lower or "attorneys for plaintiff" in lower or "attorneys for defendant" in lower:
-        out["alignment"] = "center"
-        out["italic"] = True
-    # To the above named defendant: center + underline
-    elif "to the above named defendant" in lower or "to the above-named defendant" in lower:
-        out["alignment"] = "center"
-        out["underline"] = True
-    # Cause of action / NEGLIGENCE: center + bold
-    elif ("as and for" in lower and "cause of action" in lower) or (len(t) < 30 and t.isupper() and not t.endswith(".")):
+    # Document title only: center + bold (NOTICE OF CLAIM, SUMMONS — exact or very short all-caps)
+    elif t in ("SUMMONS", "VERIFIED COMPLAINT", "COMPLAINT", "NOTICE OF CLAIM") or (len(t) <= 25 and t.isupper() and "cause" not in lower):
         out["alignment"] = "center"
         out["bold"] = True
     # -against-: center
     elif t == "-against-" or t.strip() == "-against-":
         out["alignment"] = "center"
-    # Firm name / address block (centered): often all caps or has comma/numbers
-    elif "pllc" in lower or "p.c." in lower or "esq." in lower:
-        if len(t) < 80:
-            out["alignment"] = "center"
+    # Do NOT center: jury trial, to the above named defendant, cause of action, firm lines — leave alignment to HTML or default to left/justify
+    # Bold/underline/italic still applied where appropriate:
+    elif "jury trial demanded" in lower or "attorneys for plaintiff" in lower or "attorneys for defendant" in lower:
+        out["italic"] = True
+    elif "to the above named defendant" in lower or "to the above-named defendant" in lower:
+        out["underline"] = True
+    elif ("as and for" in lower and "cause of action" in lower) or (len(t) < 30 and t.isupper() and not t.endswith(".")):
+        out["bold"] = True
     return out
 
 
@@ -386,8 +378,11 @@ def html_to_docx_bytes(html: str, font_name: str | None = None, font_size_pt: fl
         p = doc.add_paragraph()
         full_text = "".join(r[0] or "" for r in runs).strip()
         legal_fmt = _legal_paragraph_format(full_text)
+        # Prefer alignment from HTML (CKEditor); then legal caption-only center; long body defaults to justify
         if block.get("alignment") and block["alignment"] in align_map:
             p.alignment = align_map[block["alignment"]]
+        elif not (list_item or _looks_like_numbered_paragraph(runs)) and len(full_text) > 80:
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         elif legal_fmt.get("alignment") and legal_fmt["alignment"] in align_map:
             p.alignment = align_map[legal_fmt["alignment"]]
         elif not (list_item or _looks_like_numbered_paragraph(runs)) and len(full_text) > 60:

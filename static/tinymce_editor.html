@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Legal Document Editor — TinyMCE</title>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --surface: #ffffff;
+      --border: #dee2e6;
+      --text: #212529;
+      --accent: #5c4d9e;
+      --accent-dim: #6f42c1;
+      --success: #198754;
+      --error: #dc3545;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+    .app-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .app-bar h1 { font-size: 1.25rem; font-weight: 600; margin: 0; }
+    .app-bar a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+    .app-bar a:hover { text-decoration: underline; }
+    .app-bar .actions { display: flex; align-items: center; gap: 0.75rem; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .btn:hover {
+      border-color: var(--accent-dim);
+      background: rgba(111, 66, 193, 0.08);
+      color: var(--accent-dim);
+    }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+    .editor-wrap { max-width: 960px; margin: 1.5rem auto; padding: 0 1.5rem 2rem; }
+    .editor-wrap .tox-tinymce { min-height: 420px; }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+    }
+    .toast.success { background: var(--success); color: #fff; }
+    .toast.error { background: var(--error); color: #fff; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <div>
+      <h1>Legal Document Editor (TinyMCE)</h1>
+      <a href="/">← Back to DOCX Formatting Viewer</a>
+      <span style="margin-left: 0.5rem;">|</span>
+      <a href="/ckeditor">Open CKEditor</a>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn" id="btnExportJson" title="Get editor content as JSON">Export JSON</button>
+      <button type="button" class="btn btn-primary" id="btnDownloadDocx" title="Convert HTML to DOCX and download">Download as DOCX</button>
+    </div>
+  </header>
+
+  <main class="editor-wrap">
+    <textarea id="editor" style="min-height: 420px;"></textarea>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.tiny.cloud/1/nkebv4a0y2hw532tdn4m77onpp2rc47r63x9trc996g6ve83/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+  <script>
+    (function () {
+      const editorEl = document.getElementById("editor");
+      const btnExportJson = document.getElementById("btnExportJson");
+      const btnDownloadDocx = document.getElementById("btnDownloadDocx");
+      const toastEl = document.getElementById("toast");
+
+      function showToast(message, type) {
+        toastEl.textContent = message;
+        toastEl.className = "toast " + (type || "success");
+        toastEl.classList.remove("hidden");
+        setTimeout(function () { toastEl.classList.add("hidden"); }, 4000);
+      }
+
+      const defaultContent = "<p><strong>SUMMONS</strong></p>\n<p style=\"text-align: center;\">Supreme Court of the State of New York</p>\n<p style=\"text-align: center;\">County of __________</p>\n<p>&nbsp;</p>\n<p>To the above-named defendant:</p>\n<p>You are hereby summoned to answer the complaint in this action.</p>\n<p>&nbsp;</p>";
+
+      function getLoadToken() {
+        const params = new URLSearchParams(window.location.search);
+        return params.get("load") || params.get("token") || "";
+      }
+
+      function initEditor(initialContent) {
+        const content = (initialContent && initialContent.trim()) ? initialContent : defaultContent;
+
+        tinymce.init({
+          selector: "#editor",
+          api_key: "nkebv4a0y2hw532tdn4m77onpp2rc47r63x9trc996g6ve83",
+          plugins: [
+            "anchor", "autolink", "charmap", "codesample", "emoticons", "link", "lists", "media", "searchreplace", "table", "visualblocks", "wordcount",
+            "checklist", "mediaembed", "casechange", "formatpainter", "pageembed", "a11ychecker", "tinymcespellchecker", "advtable", "advcode", "advtemplate",
+            "tableofcontents", "footnotes", "mergetags", "autocorrect", "typography", "inlinecss", "markdown", "importword", "exportword", "exportpdf"
+          ],
+          toolbar: "undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link media table mergetags | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat",
+          mergetags_list: [
+            { value: "First.Name", title: "First Name" },
+            { value: "Email", title: "Email" }
+          ],
+          content_style: "body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; line-height: 1.5; }",
+          init_instance_callback: function (ed) {
+            ed.setContent(content);
+
+            btnExportJson.addEventListener("click", function () {
+              var data = ed.getContent();
+              var json = JSON.stringify({ html: data });
+              var blob = new Blob([json], { type: "application/json" });
+              var a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = "document-content.json";
+              a.click();
+              URL.revokeObjectURL(a.href);
+              showToast("JSON exported.");
+            });
+
+            btnDownloadDocx.addEventListener("click", function () {
+              var html = ed.getContent();
+              if (!html || html.replace(/<[^>]+>/g, "").replace(/\s/g, "").length === 0) {
+                showToast("Document is empty. Add content first.", "error");
+                return;
+              }
+              btnDownloadDocx.disabled = true;
+              var docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+              fetch("/tinymce/api/export-docx", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ html: html })
+              })
+                .then(function (res) {
+                  if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || "Export failed"); });
+                  return res.arrayBuffer();
+                })
+                .then(function (buffer) {
+                  var blob = new Blob([buffer], { type: docxMime });
+                  var a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = "document.docx";
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  showToast("DOCX downloaded.");
+                })
+                .catch(function (err) {
+                  showToast(err.message || "Export failed.", "error");
+                })
+                .finally(function () {
+                  btnDownloadDocx.disabled = false;
+                });
+            });
+          }
+        });
+      }
+
+      var loadToken = getLoadToken();
+      if (loadToken) {
+        fetch("/tinymce/api/load?token=" + encodeURIComponent(loadToken))
+          .then(function (res) {
+            if (!res.ok) throw new Error("Content not found or expired");
+            return res.json();
+          })
+          .then(function (data) {
+            initEditor(data.html || "");
+          })
+          .catch(function () {
+            showToast("Content could not be loaded. Opening with default text.", "error");
+            initEditor(defaultContent);
+          });
+      } else {
+        initEditor(defaultContent);
+      }
+    })();
+  </script>
+</body>
+</html>

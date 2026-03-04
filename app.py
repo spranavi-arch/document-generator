@@ -18,10 +18,12 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 from ckeditor_bp import ckeditor_bp
+from tinymce_bp import tinymce_bp
 
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB max upload
 app.register_blueprint(ckeditor_bp)
+app.register_blueprint(tinymce_bp)
 ALLOWED_EXTENSIONS = {"docx"}
 
 

@@ -216,6 +216,7 @@
               return;
             }
             btnDownloadDocx.disabled = true;
+            const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             fetch("/ckeditor/api/export-docx", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -223,10 +224,11 @@
             })
               .then(function (res) {
                 if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || "Export failed"); });
-                return res.blob();
+                return res.arrayBuffer();
               })
-              .then(function (blob) {
-                const a = document.createElement("a");
+              .then(function (buffer) {
+                var blob = new Blob([buffer], { type: docxMime });
+                var a = document.createElement("a");
                 a.href = URL.createObjectURL(blob);
                 a.download = "document.docx";
                 a.click();

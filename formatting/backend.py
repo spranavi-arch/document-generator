@@ -104,6 +104,30 @@ def _log_blocks(blocks, project_dir: str):
         return
 
 
+def _log_verification_presence(blocks: list):
+    """Log whether Attorney's Verification (or similar) appears in blocks to help debug missing/blacked-out bottom sections.
+    If absent, the LLM may have truncated (e.g. max_tokens) or the raw input may not include that section."""
+    try:
+        if not blocks:
+            logging.info("Verification tracking: no blocks")
+            return
+        n = len(blocks)
+        has_verification_heading = any(
+            "attorney" in (t or "").lower() and "verification" in (t or "").lower()
+            for _, t in blocks
+        )
+        has_request_for_claim = any(
+            "request for claim" in (t or "").lower() or "notice of entry" in (t or "").lower()
+            for _, t in blocks
+        )
+        logging.info(
+            "Verification tracking: blocks=%s, verification_heading=%s, request_for_claim_or_notice=%s",
+            n, has_verification_heading, has_request_for_claim,
+        )
+    except Exception:
+        return
+
+
 def _get_document_font_from_schema(schema: dict) -> str:
     """Pick one font name from the template schema so the whole document uses that font. Prefer paragraph/normal style."""
     style_formatting = schema.get("style_formatting") or {}
@@ -145,12 +169,12 @@ def extract_and_store_styles(template_file) -> dict:
     return schema
 
 
-def process_document(generated_text, template_file):
+def process_document(generated_text, template_file, use_slot_fill: bool = False):
     """
     Input 1: Uploaded DOCX template (desired styles and formatting).
     Input 2: Raw legal text (unformatted).
-    Segment and render entire text using template styles (no slot-fill).
-    Uses LLM to segment and label; template page images (and OCR text) are generated and sent to the LLM when available.
+    When use_slot_fill=True and template has template_structure: LLM fills exact slots; inject_blocks uses template_structure.
+    When use_slot_fill=False: segment entire text using template styles; template page images sent to LLM when available.
     """
     project_dir = _project_dir()
     doc = Document(template_file)
@@ -198,7 +222,7 @@ def process_document(generated_text, template_file):
         blocks = format_text_with_llm(
             generated_text,
             schema,
-            use_slot_fill=False,
+            use_slot_fill=use_slot_fill,
             template_page_images=schema.get("template_page_images") or [],
             template_page_ocr_texts=schema.get("template_page_ocr_texts") or [],
         )
@@ -214,8 +238,12 @@ def process_document(generated_text, template_file):
     # Write block list to disk so we can diff "good" vs "bad" runs for the same input.
     _log_blocks(blocks, project_dir)
 
+    # Track whether Attorney's Verification / bottom section is present (helps debug missing or blacked-out sections)
+    _log_verification_presence(blocks)
+
     clear_document_body(doc)
     # Preserve template's section/column layout (do not force single-column so two-column claimant/attorney blocks match template)
+    template_structure = schema.get("template_structure") if use_slot_fill else None
     inject_blocks(
         doc,
         blocks,
@@ -223,7 +251,7 @@ def process_document(generated_text, template_file):
         style_formatting=schema.get("style_formatting", {}),
         line_samples=schema.get("line_samples", []),
         section_heading_samples=schema.get("section_heading_samples", []),
-        template_structure=None,
+        template_structure=template_structure,
         numbered_num_id=schema.get("numbered_num_id"),
         numbered_ilvl=schema.get("numbered_ilvl", 0),
         bold_phrases_from_template=schema.get("bold_phrases_from_template"),

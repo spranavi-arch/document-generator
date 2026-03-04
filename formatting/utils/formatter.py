@@ -691,26 +691,28 @@ SECTION_STARTER_PHRASES = (
 )
 # Space before a section starter (pt) and after court caption (pt) for consistent structure
 SPACE_BEFORE_SECTION_PT = 14.0
-SPACE_AFTER_CAPTION_PT = 10.0
+SPACE_AFTER_CAPTION_PT = 12.0
 SPACE_BEFORE_SIGNATURE_PT = 18.0
 
 # Numbered list (allegations): spacing and hanging indent for clean legal layout
 SPACE_BEFORE_NUMBERED_PT = 0.0
-SPACE_AFTER_NUMBERED_PT = 8.0   # space between each numbered point for readability
+SPACE_AFTER_NUMBERED_PT = 10.0   # space between each numbered point for readability
 NUMBERED_LEFT_INDENT_PT = 18.0   # body text indented 0.25"
 NUMBERED_FIRST_LINE_INDENT_PT = -18.0  # hanging: number left-aligned, description indented
 
 # Default space after every paragraph when template does not set it (readability)
-DEFAULT_SPACE_AFTER_PARAGRAPH_PT = 10.0
+DEFAULT_SPACE_AFTER_PARAGRAPH_PT = 12.0
 # Minimum space after body paragraphs so output is not cramped (override template if smaller)
-MIN_SPACE_AFTER_PARAGRAPH_PT = 6.0
+MIN_SPACE_AFTER_PARAGRAPH_PT = 8.0
 # Default first-line indent for body paragraphs when template does not set it (court-style)
 DEFAULT_FIRST_LINE_INDENT_PT = 12.0
 MIN_FIRST_LINE_INDENT_PT = 6.0  # avoid zero indent when template set tiny value
-# Default line spacing within a paragraph when template does not set it (1.5 = court-style readability)
+# Default line spacing within a paragraph when template does not set it (1.5 = readable, court-style)
 DEFAULT_LINE_SPACING_MULTIPLE = 1.5
+# Line spacing for negligence / cause-of-action allegation points (each "That on...", "By reason of...", etc.)
+NEGLIGENCE_LINE_SPACING_MULTIPLE = 2.0
 # Space after section/heading lines (headings get this when template does not set space_after)
-SPACE_AFTER_HEADING_PT = 12.0
+SPACE_AFTER_HEADING_PT = 14.0
 
 # Cause-of-action headings (e.g. "AS AND FOR A FIRST CAUSE OF ACTION:") — treat as section header
 CAUSE_OF_ACTION_PHRASE = "cause of action"
@@ -739,15 +741,42 @@ BOLD_IN_SAMPLE_PHRASES = (
     "The damages, and Injuries sustained",
     "4. The damages",
     "SEELIG DRESSLER OCHANI",
+    # NOTICE OF CLAIM section headings and labels (bold in template)
+    "The nature of the claim:",
+    "The items of damage or injuries claimed are:",
+    "Claimant,",
+    "Respondents.",
+    "-against-",
+    "TO:",
+    "1. The name and post-office address of the claimant",
+    "2. The time when, the place where and the manner in which the claim arose:",
+    "Total amount claimed:",
+    "Dated:",
 )
 
 
 def _looks_like_court_caption(text: str) -> bool:
-    """True if block text is a court caption line (so we can apply one consistent style)."""
+    """True if block text is a court caption line (so we can apply one consistent style and caption alignment)."""
     if not text or len(text.strip()) < 3:
         return False
-    t = text.strip().lower()
-    return any(p in t or t.startswith(p) for p in COURT_CAPTION_PHRASES)
+    t = text.strip()
+    lower = t.lower()
+    if any(p in lower or lower.startswith(p) for p in COURT_CAPTION_PHRASES):
+        return True
+    # Document title / matter line: only at start of line so body text is not included
+    if lower.startswith("in the matter of") and len(t) < 90:
+        return True
+    if (lower == "notice of claim" or lower.startswith("notice of claim")) and len(t) < 50:
+        return True
+    if (lower == "summons" or lower.startswith("summons")) and len(t) < 40:
+        return True
+    # Claimant, Respondent, Plaintiff, Defendant, Petitioner (standalone line)
+    if re.match(r"^(Claimant|Respondent|Plaintiff|Defendant|Petitioner)\,?\.?$", t, re.I):
+        return True
+    # Party name lines: all caps ending with comma, or respondent list (semicolons)
+    if t.endswith(",") and len(t) < 130 and (t.isupper() or (";" in t and t[0].isupper())):
+        return True
+    return False
 
 
 def _looks_like_index_no(text: str) -> bool:
@@ -801,42 +830,44 @@ def _append_index_no_to_paragraph(paragraph, index_text: str, run_fmt: dict):
 
 
 def _should_align_left_caption_block(text: str) -> bool:
-    """True if this block is part of the court caption (court, county, parties, -against-) and should be left-aligned."""
-    if not text or len(text.strip()) < 2:
-        return False
-    t = text.strip()
-    lower = t.lower()
-    if _looks_like_court_caption(t):
-        return True
-    if t.isupper() and ("COURT" in t or "COUNTY" in t) and len(t) < 60:
-        return True
-    if re.match(r"^\-against\-\.?$", t, re.I) or (len(t) < 15 and "against" in lower and t.count("-") >= 2):
-        return True
-    if re.match(r"^(Claimant|Respondent|Plaintiff|Defendant|Petitioner)\,?\.?$", t, re.I):
-        return True
-    if len(t) < 55 and (t.endswith(",") or t.endswith(".")) and (t.isupper() or ("," in t and len(t.split()) <= 4)):
-        if any(x in lower for x in ("plaintiff", "defendant", "claimant", "respondent", "city of", "county of")):
-            return True
-        if t.isupper() and not lower.startswith("to:") and not lower.startswith("attached"):
-            return True
-    if re.match(r"^In\s+the\s+Matter\s+of\s+", t, re.I) and len(t) < 70:
-        return True
+    """Return False so caption block lines (NOTICE OF CLAIM, In the Matter of..., parties, -against-, Claimant, Respondents) are not forced left; they are center-aligned via _should_align_center_caption. TO:/addresses remain left via _should_align_left_only."""
     return False
 
 
 def _should_align_center_caption(text: str) -> bool:
-    """True if this block is a document title and should be centered (NOTICE OF MOTION, AFFIRMATION IN SUPPORT, etc.). Caption block is left-aligned."""
+    """True for the full caption block: document title (NOTICE OF CLAIM, SUMMONS), In the Matter of..., court/county lines, -against-, Claimant/Respondents, and party name lines — all center-aligned."""
     if not text or len(text.strip()) < 2:
         return False
     t = text.strip()
     lower = t.lower()
-    # Document titles only (centered): NOTICE OF MOTION, AFFIRMATION IN SUPPORT, AFFIDAVIT OF SERVICE, NOTICE OF CLAIM, SUMMONS, etc.
-    if len(t) <= 80 and (
-        lower in ("notice of claim", "summons", "verified complaint", "complaint")
-        or (t.isupper() and any(kw in lower for kw in ("notice of claim", "summons", "complaint", "motion", "affirmation", "affidavit", "restore", "support", "service")) and len(t.split()) <= 12)
-        or (lower.startswith("notice of claim") or lower == "notice of claim")
-        or (lower.startswith("notice of motion") or lower.startswith("affirmation in support") or lower.startswith("affidavit of"))
-    ):
+    # Short document titles
+    if len(t) <= 40:
+        if lower in ("notice of claim", "summons", "verified complaint", "complaint"):
+            return True
+        if lower.startswith("notice of motion") and len(t) <= 35:
+            return True
+        if lower.startswith("affirmation in support") and len(t) <= 35:
+            return True
+        if lower.startswith("affidavit of") and len(t) <= 35:
+            return True
+    # "In the Matter of the Claim of ..." and similar
+    if re.match(r"^In\s+the\s+Matter\s+of\s+", t, re.I) and len(t) < 90:
+        return True
+    # Court/county caption lines
+    if _looks_like_court_caption(t):
+        return True
+    if t.isupper() and ("COURT" in t or "COUNTY" in t) and len(t) < 70:
+        return True
+    # -against-
+    if re.match(r"^\-against\-\.?$", t, re.I) or (len(t) <= 15 and "against" in lower and t.count("-") >= 2):
+        return True
+    # Claimant, Respondent, Plaintiff, Defendant, Petitioner
+    if re.match(r"^(Claimant|Respondent|Plaintiff|Defendant|Petitioner)\,?\.?$", t, re.I):
+        return True
+    # Party name lines: all-caps ending with comma, or respondent list (semicolons, ends with comma)
+    if t.endswith(",") and t.isupper() and not lower.startswith("to:") and len(t) < 130:
+        return True
+    if t.endswith(",") and ";" in t and len(t) < 130 and (t.isupper() or re.match(r"^[A-Z][^;]*;\s*", t)):
         return True
     return False
 
@@ -1085,20 +1116,26 @@ def _apply_default_body_indent(paragraph, style: str = None, style_formatting: d
 
 
 def _apply_default_line_spacing(paragraph, style: str = None, style_formatting: dict = None):
-    """Set line spacing only when the template/source did not set it (prefer source document)."""
+    """Set line spacing to default (1.5) when template did not set it or set it to single (1.0). Prefer template only when it explicitly uses 1.5+."""
     if not paragraph:
         return
     try:
         if style is not None and style_formatting is not None:
             fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
-            if fmt.get("line_spacing") is not None or fmt.get("line_spacing_rule") is not None:
-                return
+            template_val = fmt.get("line_spacing")
+            if template_val is not None:
+                try:
+                    v = float(template_val)
+                    if v >= DEFAULT_LINE_SPACING_MULTIPLE:
+                        return
+                except (TypeError, ValueError):
+                    pass
         pf = paragraph.paragraph_format
         current = getattr(pf, "line_spacing", None)
         rule = getattr(pf, "line_spacing_rule", None)
-        if current is None and rule is None:
+        if current is None or (isinstance(current, (int, float)) and float(current) < DEFAULT_LINE_SPACING_MULTIPLE):
             pf.line_spacing = DEFAULT_LINE_SPACING_MULTIPLE
-            pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
+            pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
     except Exception:
         pass
 
@@ -1204,6 +1241,12 @@ def _render_caption_blocks_into_cell(cell, blocks: list, style_map: dict, style_
         text = (text or "").strip()
         if not text:
             continue
+        # Normalize tabs in address-like lines so content stays left-aligned instead of scattered by wide tab stops
+        if "\t" in text and (
+            text.lower().startswith("to:") or text.lower().startswith("from:")
+            or ("," in text and re.search(r"\d{5}", text))
+        ):
+            text = text.replace("\t", " ")
         original_text = text
         style = _resolve_style(block_type, style_map, style_formatting)
         if style not in valid_style_names:
@@ -1214,6 +1257,7 @@ def _render_caption_blocks_into_cell(cell, blocks: list, style_map: dict, style_
             p_line = cell.add_paragraph(underscore_line, style=style)
             fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
             _apply_paragraph_format(p_line, fmt)
+            _apply_default_line_spacing(p_line, style, style_formatting)
             if right_align:
                 p_line.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             text = name_part
@@ -1224,6 +1268,7 @@ def _render_caption_blocks_into_cell(cell, blocks: list, style_map: dict, style_
         p = _add_paragraph_to_cell_with_inline_formatting(cell, segments, style, run_fmt)
         fmt = (style_formatting.get(style) or {}).get("paragraph_format") or {}
         _apply_paragraph_format(p, fmt)
+        _apply_default_line_spacing(p, style, style_formatting)
         if right_align:
             p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         # Caption left cell: add solid separator line after "COUNTY OF X" so it always renders
@@ -1233,6 +1278,7 @@ def _render_caption_blocks_into_cell(cell, blocks: list, style_map: dict, style_
             _add_bottom_border_to_paragraph(sep, pt=0.5, dashed=False)
             pf = (style_formatting.get(style) or {}).get("paragraph_format") or {}
             _apply_paragraph_format(sep, pf)
+            _apply_default_line_spacing(sep, style, style_formatting)
 
 
 def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_samples=None, section_heading_samples=None, template_structure=None, numbered_num_id=None, numbered_ilvl=0, bold_phrases_from_template=None, caption_table_layout=None):
@@ -1363,6 +1409,13 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
         if seg_idx > 0:
             doc.add_page_break()
         caption_left, caption_right, body_blocks = _split_caption_body(segment)
+        # If caption has "In the Matter of the Claim of" but no "NOTICE OF CLAIM" block, inject the title so it always appears
+        if caption_left and not any((t or "").strip().upper() == "NOTICE OF CLAIM" for _, t in caption_left):
+            if any("in the matter of the claim" in (t or "").lower() for _, t in caption_left):
+                title_style = style_map.get("section_header") or style_map.get("heading") or style_map.get("paragraph") or "Normal"
+                if valid_style_names and title_style not in valid_style_names:
+                    title_style = list(valid_style_names)[0]
+                caption_left.insert(0, (title_style, "NOTICE OF CLAIM"))
         if seg_idx == 0:
             if caption_table_layout.get("use_table") and (caption_left or caption_right):
                 first_caption_left, first_caption_right = caption_left, caption_right
@@ -1396,6 +1449,12 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
 
         for block_type, text in blocks_to_render:
             text = (text or "").strip()
+            # Normalize tabs in address-like lines so they stay left-aligned instead of scattered
+            if "\t" in text and (
+                text.lower().startswith("to:") or text.lower().startswith("from:")
+                or ("," in text and re.search(r"\d{5}", text))
+            ):
+                text = text.replace("\t", " ")
 
             # Skip long duplicate paragraphs (repeated summons, captions, allegations from concatenated input)
             if len(text) >= MIN_DEDUP_LEN:
@@ -1515,6 +1574,13 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
                             _apply_num_pr(p, numbered_num_id, numbered_ilvl)
                         if _is_numbered_point_content(one):
                             _apply_numbered_paragraph_layout(p)
+                        if _starts_allegation(one):
+                            try:
+                                pf = p.paragraph_format
+                                pf.line_spacing = NEGLIGENCE_LINE_SPACING_MULTIPLE
+                                pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+                            except Exception:
+                                pass
                         enforce_legal_alignment("numbered", p)
                 continue
 
@@ -1590,8 +1656,20 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
                         _apply_default_body_indent(p, style, style_formatting)
                     if align_type in ("paragraph", "numbered"):
                         _apply_default_line_spacing(p, style, style_formatting)
-                    enforce_legal_alignment(align_type, p)
-                    # Caption/body alignment heuristics apply only outside the fixed caption/footer layouts.
+                    if is_negligence_allegation:
+                        try:
+                            pf = p.paragraph_format
+                            pf.line_spacing = NEGLIGENCE_LINE_SPACING_MULTIPLE
+                            pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+                        except Exception:
+                            pass
+                else:
+                    # Caption/address blocks: apply same default line spacing (1.5) when template does not set it
+                    _apply_default_line_spacing(p, style, style_formatting)
+                    align_type = "section_header"
+                enforce_legal_alignment(align_type, p)
+                # Caption/body alignment heuristics: only apply caption alignment when this block is the court caption.
+                if is_court_caption:
                     if _should_align_left_caption_block(txt_stripped):
                         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                     elif _should_align_right_caption(txt_stripped):
@@ -1600,9 +1678,19 @@ def inject_blocks(doc, blocks, style_map=None, style_formatting=None, line_sampl
                         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     elif not _template_has_alignment(style, style_formatting) and _should_align_left_only(txt_stripped):
                         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                if _looks_like_jurat_line(txt_stripped):
+                # Force justify for long body paragraphs when no caption heuristic applied (avoids left-aligned body when style is heading/section_header)
+                if not is_court_caption and len(txt_stripped) > 100:
+                    if not _should_align_left_caption_block(txt_stripped) and not _should_align_right_caption(txt_stripped) and not _should_align_center_caption(txt_stripped) and not _should_align_left_only(txt_stripped):
+                        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                     try:
                         p.paragraph_format.keep_with_next = True
+                    except Exception:
+                        pass
+                # Notice of Claim / legal docs: do not center body content. Only caption block (NOTICE OF CLAIM, parties, -against-, etc.) may be center; override template center for non-caption.
+                if not is_court_caption:
+                    try:
+                        if p.paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER:
+                            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY if len(txt_stripped) > 100 else WD_ALIGN_PARAGRAPH.LEFT
                     except Exception:
                         pass
                 if _looks_like_list_intro(txt_stripped) or _looks_like_bullet_item(txt_stripped):
